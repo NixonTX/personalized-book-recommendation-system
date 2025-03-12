@@ -1,7 +1,7 @@
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 from sklearn.feature_extraction.text import TfidfVectorizer
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, save_npz
 from scipy.io import mmwrite
 
 # Load Users.csv with Age as string
@@ -89,5 +89,7 @@ books2_df["Title_Author"] = books2_df["Title"] + " " + books2_df["Author"]
 tfidf = TfidfVectorizer(stop_words="english")
 tfidf_matrix = tfidf.fit_transform(books2_df["Title_Author"])
 
-# Save the sparse TF-IDF matrix
-mmwrite("tfidf_matrix_sparse.mtx", tfidf_matrix)
+# # Save the sparse TF-IDF matrix
+# mmwrite("tfidf_matrix_sparse.mtx", tfidf_matrix)
+# Saving .npz format
+save_npz("tfidf_matrix_sparse.npz", tfidf_matrix)
