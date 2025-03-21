@@ -19,6 +19,14 @@ users_df.to_csv("encoded_users.csv", index=False)
 books_df = pd.read_csv("goodreadsbooks/books.csv", on_bad_lines='skip')
 books2_df = pd.read_csv("bookcrossing_dataset/Books.csv", delimiter=";")
 
+# Create a mapping from index to ISBN
+index_to_isbn = {idx: isbn for idx, isbn in enumerate(books2_df["ISBN"])}
+
+# Save the mapping to a file
+import pickle
+with open("index_to_isbn.pkl", "wb") as f:
+    pickle.dump(index_to_isbn, f)
+
 # Fill missing values in books2_df
 books2_df["Author"] = books2_df["Author"].fillna("Unknown")
 books2_df["Publisher"] = books2_df["Publisher"].fillna("Unknown")

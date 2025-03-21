@@ -1,3 +1,4 @@
+import pickle
 import numpy as np
 from scipy.sparse import load_npz
 from sklearn.metrics.pairwise import cosine_similarity
@@ -5,6 +6,13 @@ from tqdm import tqdm  # For progress bar
 
 # Load the sparse TF-IDF matrix
 tfidf_matrix = load_npz("../datasets/tfidf_matrix_sparse.npz")
+
+# After loading the mappings (if available)
+with open("../datasets/book_to_index.pkl", "rb") as f:
+    book_to_index = pickle.load(f)
+
+# Debug prints to verify book mappings
+print(f"Book to index sample: {list(book_to_index.items())[:5]}")
 
 # Parameters
 n_books = tfidf_matrix.shape[0]
@@ -28,5 +36,9 @@ for i in tqdm(range(0, n_books, chunk_size)):
 # Save the top-k similarities and indices
 np.save("../datasets/top_k_similarities.npy", top_k_similarities)
 np.save("../datasets/top_k_indices.npy", top_k_indices)
+
+
+print(f"Top-k similarities sample: {top_k_similarities[:5]}")
+print(f"Top-k indices sample: {top_k_indices[:5]}")
 
 print("Content-Based Filtering: Top-k cosine similarities computed!")
