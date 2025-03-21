@@ -4,7 +4,6 @@ from scipy.sparse import lil_matrix, csr_matrix
 from sklearn.decomposition import TruncatedSVD
 import pickle
 
-# Load the full dataset
 ratings_df = pd.read_csv("../datasets/bookcrossing_dataset/Ratings.csv", sep=";")
 ratings_df["Rating"] = pd.to_numeric(ratings_df["Rating"], errors="coerce")
 ratings_df = ratings_df[ratings_df["Rating"] > 0]  # Filter out implicit feedback
@@ -13,9 +12,9 @@ ratings_df = ratings_df[ratings_df["Rating"] > 0]  # Filter out implicit feedbac
 user_to_index = {user_id: idx for idx, user_id in enumerate(ratings_df["User-ID"].unique())}
 book_to_index = {book_id: idx for idx, book_id in enumerate(ratings_df["ISBN"].unique())}
 
-# Debug prints to verify mappings
-print(f"User to index sample: {list(user_to_index.items())[:5]}")
-print(f"Book to index sample: {list(book_to_index.items())[:5]}")
+# # Debug prints to verify mappings
+# print(f"User to index sample: {list(user_to_index.items())[:5]}")
+# print(f"Book to index sample: {list(book_to_index.items())[:5]}")
 
 # Create the user-item matrix in lil format for efficient updates
 num_users = len(user_to_index)
@@ -43,8 +42,8 @@ svd = TruncatedSVD(n_components=n_components, random_state=42)
 user_factors = svd.fit_transform(user_item_matrix)
 item_factors = svd.components_.T
 
-print(f"User factors sample: {user_factors[:5]}")
-print(f"Item factors sample: {item_factors[:5]}")
+# print(f"User factors sample: {user_factors[:5]}")
+# print(f"Item factors sample: {item_factors[:5]}")
 
 # Save the latent factors for later use
 np.save("../datasets/user_factors.npy", user_factors)
@@ -55,10 +54,5 @@ with open("../datasets/user_to_index.pkl", "wb") as f:
     pickle.dump(user_to_index, f)
 with open("../datasets/book_to_index.pkl", "wb") as f:
     pickle.dump(book_to_index, f)
-
-# Debug prints to verify alignment
-print(f"Shape of user_item_matrix: {user_item_matrix.shape}")
-print(f"Shape of user_factors: {user_factors.shape}")  # Should be (num_users, n_components)
-print(f"Shape of item_factors: {item_factors.shape}")  # Should be (num_books, n_components)
 
 print("Collaborative Filtering: Matrix Factorization completed!")
