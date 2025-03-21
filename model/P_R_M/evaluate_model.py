@@ -15,11 +15,11 @@ ratings_df = pd.read_csv("../datasets/bookcrossing_dataset/Ratings.csv", sep=";"
 ratings_df["Rating"] = pd.to_numeric(ratings_df["Rating"], errors="coerce")
 ratings_df = ratings_df[ratings_df["Rating"] > 0]  # Filter out implicit feedback
 
-# Debug prints to verify alignment
-print(f"Number of users in dataset: {ratings_df['User-ID'].nunique()}")
-print(f"Shape of user_factors: {user_factors.shape}")  # Should match the number of users in the dataset
-print(f"Number of books in dataset: {ratings_df['ISBN'].nunique()}")
-print(f"Shape of item_factors: {item_factors.shape}")  # Should match the number of books in the dataset
+# # Debug prints to verify alignment
+# print(f"Number of users in dataset: {ratings_df['User-ID'].nunique()}")
+# print(f"Shape of user_factors: {user_factors.shape}")  # Should match the number of users in the dataset
+# print(f"Number of books in dataset: {ratings_df['ISBN'].nunique()}")
+# print(f"Shape of item_factors: {item_factors.shape}")  # Should match the number of books in the dataset
 
 # Split data into train and test sets
 train_df, test_df = train_test_split(ratings_df, test_size=0.2, random_state=42)
@@ -28,9 +28,9 @@ train_df, test_df = train_test_split(ratings_df, test_size=0.2, random_state=42)
 valid_user_ids = set(range(user_factors.shape[0]))  # Valid user IDs are 0 to user_factors.shape[0] - 1
 test_df = test_df[test_df["User-ID"].isin(valid_user_ids)]
 
-# Debug prints to verify filtered test dataset
-print(f"Number of users in test dataset after filtering: {test_df['User-ID'].nunique()}")
-print(f"Sample user IDs in test dataset: {test_df['User-ID'].unique()[:5]}")
+# # Debug prints to verify filtered test dataset
+# print(f"Number of users in test dataset after filtering: {test_df['User-ID'].nunique()}")
+# print(f"Sample user IDs in test dataset: {test_df['User-ID'].unique()[:5]}")
 
 
 # Evaluation function
@@ -46,10 +46,10 @@ def evaluate_model(test_df, top_n=10):
         # Get recommended books
         recommended_books = recommend_books(user_id, train_df, top_n=top_n)
 
-        # Debugging: Print recommendations and true interactions
-        print(f"User {user_id}:")
-        print(f"Recommended books: {recommended_books}")
-        print(f"True interactions: {true_books}")
+        # # Debugging: Print recommendations and true interactions
+        # print(f"User {user_id}:")
+        # print(f"Recommended books: {recommended_books}")
+        # print(f"True interactions: {true_books}")
 
         # Compute Precision@k and Recall@k
         relevant = len(set(recommended_books) & set(true_books))
