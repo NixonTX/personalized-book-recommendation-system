@@ -23,6 +23,10 @@ item_factors = np.load("../datasets/item_factors.npy")
 top_k_similarities = np.load("../datasets/top_k_similarities.npy")
 top_k_indices = np.load("../datasets/top_k_indices.npy")
 
+# Load the similarity matrix
+with open("similarity_matrix.pkl", "rb") as f:
+    similarity_matrix = pickle.load(f)
+
 def hybrid_score(user_id, book_id, alpha=0.8):
     """
     Compute the hybrid score for a user-item pair.
