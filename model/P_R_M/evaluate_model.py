@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from hybrid_model import hybrid_score, recommend_books
+from backend.app import recommend_books
+from hybrid_model import hybrid_score
 from tqdm import tqdm  # Import tqdm for progress tracking
 
 # Load factors and similarities
