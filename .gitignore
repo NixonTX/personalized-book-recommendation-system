@@ -3,6 +3,7 @@
 *.pkl
 
 echo "model/datasets/*.npy" >> .gitignore
+echo "model/datasets/*.mtx" >> .gitignore
 echo "model/datasets/*.pkl" >> .gitignore
 git add .gitignore
 git commit -m "Permanently ignore dataset files"
