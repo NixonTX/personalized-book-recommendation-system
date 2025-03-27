@@ -1,3 +1,10 @@
 *.txt
 *.npy
 *.pkl
+
+echo "model/datasets/*.npy" >> .gitignore
+echo "model/datasets/*.pkl" >> .gitignore
+
+git rm --cached model/datasets/*.npy model/datasets/*.pkl
+
+git push origin temp-branch
