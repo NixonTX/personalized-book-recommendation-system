@@ -5,4 +5,4 @@ model/datasets/*
 
 *.npy
 *.pkl
-*.mtx
+*.mtxmodel/datasets/kaggle_outputs/top_k_*.npy
