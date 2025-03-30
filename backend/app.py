@@ -16,7 +16,7 @@ print("🐛 DEBUG: FastAPI app created")
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Congrats, It Works!"}
 
 @app.get("/recommend/{user_id}")
 async def get_recommendations(user_id: int):
