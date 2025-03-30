@@ -33,9 +33,9 @@ item_factors = np.load(ITEM_FACTORS_PATH)
 top_k_similarities = np.load(TOP_K_SIMILARITIES_PATH)
 top_k_indices = np.load(TOP_K_INDICES_PATH)
 
-# Load the similarity matrix
-with open("similarity_matrix.pkl", "rb") as f:
-    similarity_matrix = pickle.load(f)
+# # Load the similarity matrix
+# with open("similarity_matrix.pkl", "rb") as f:
+#     similarity_matrix = pickle.load(f)
 
 def hybrid_score(user_id, book_id, alpha=0.8):
     cf_score = np.dot(user_factors[user_id], item_factors[book_id])
@@ -95,23 +95,8 @@ def content_based_recommendations(user_id, train_df, top_n=10):
     scores = np.mean(np.where(mask, top_k_similarities, 0), axis=1)
     
     top_books_indices = np.argsort(scores)[-top_n:][::-1]
+
     return [index_to_isbn[idx] for idx in top_books_indices]
-    # Get user's interacted books from the training data
-    user_books = train_df[train_df["User-ID"] == user_id]["ISBN"].values
-    
-    # Convert user_books to indices
-    user_book_indices = [isbn_to_index[isbn] for isbn in user_books if isbn in isbn_to_index]
-    
-    # Compute content-based scores for all books using broadcasting
-    mask = np.isin(top_k_indices, user_book_indices)  # Create a mask for user's interacted books
-    scores = np.mean(np.where(mask, top_k_similarities, 0), axis=1)  # Compute mean similarity scores
-    
-    # Sort and get top-n books
-    top_books_indices = np.argsort(scores)[-top_n:][::-1]
-    
-    # Convert indices to ISBNs
-    top_books_isbns = [index_to_isbn[idx] for idx in top_books_indices]
-    return top_books_isbns
 
 def evaluate_user(user_id):
     """
