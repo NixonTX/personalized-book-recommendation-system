@@ -1,0 +1,5 @@
+asyncpg       # PostgreSQL async driver
+redis         # Redis client
+sqlalchemy    # ORM
+psycopg2-binary  # PostgreSQL adapter (sync, optional)
+python-multipart # For file uploads (if needed)

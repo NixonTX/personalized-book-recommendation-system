@@ -1,4 +1,6 @@
 *.txt
+!requirements.txt
+
 cat <<EOF > .gitignore
 # Ignore all data files
 model/datasets/*
