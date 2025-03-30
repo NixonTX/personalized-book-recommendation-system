@@ -27,7 +27,6 @@ train_df = pd.read_csv(RATINGS_PATH, sep=";")
 train_df["Rating"] = pd.to_numeric(train_df["Rating"], errors="coerce")
 train_df = train_df[train_df["Rating"] > 0]  # Filter out implicit feedback
 
-# Load precomputed factors
 user_factors = np.load(USER_FACTORS_PATH)
 item_factors = np.load(ITEM_FACTORS_PATH)
 top_k_similarities = np.load(TOP_K_SIMILARITIES_PATH)
