@@ -1,6 +1,5 @@
 from fastapi import FastAPI
-import sys
-import os
+
 
 print("🐛 DEBUG: Starting app.py")
 
@@ -16,9 +15,13 @@ print("🐛 DEBUG: FastAPI app created")
 
 # Import routers from api/v1
 from .api.v1 import recommendations
+from .api.v1 import books
 
 # Include routers
 app.include_router(recommendations.router, prefix="/api/v1")
+
+app.include_router(books.router, prefix="/api/v1")
+
 
 @app.get("/")
 async def root():
