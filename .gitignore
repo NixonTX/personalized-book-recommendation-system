@@ -6,3 +6,12 @@
 *.csv
 *.npz
 *.zip
+
+model/datasets/*.npy
+model/datasets/*.pkl
+model/datasets/*.csv
+model/datasets/*.zip
+model/datasets/*.npz
+model/datasets/*.index
+model/datasets/bookcrossing_dataset/*.csv
+model/for_notebook/*.zip
