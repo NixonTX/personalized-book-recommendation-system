@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+# Import routers from api/v1
+from .api.v1 import recommendations
+from backend.app.api.v1 import books
 
 
 print("🐛 DEBUG: Starting app.py")
@@ -13,9 +16,6 @@ except ImportError as e:
 app = FastAPI()
 print("🐛 DEBUG: FastAPI app created")
 
-# Import routers from api/v1
-from .api.v1 import recommendations
-from .api.v1 import books
 
 # Include routers
 app.include_router(recommendations.router, prefix="/api/v1")

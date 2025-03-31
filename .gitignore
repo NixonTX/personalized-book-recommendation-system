@@ -1,6 +1,11 @@
 *.txt
 !requirements.txt
 
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
 cat <<EOF > .gitignore
 # Ignore all data files
 model/datasets/*
