@@ -1,4 +1,3 @@
-# Pydantic schemas (API validation)
 from pydantic import BaseModel, Field, EmailStr
 from typing import Optional
 
@@ -9,9 +8,10 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8, example="securepassword123")
 
-class User(UserBase):
+class UserResponse(UserBase):  # Renamed from 'User'
     id: int
-    is_active: bool = True
+    is_active: bool
+    hashed_password: str  # Add if you need to expose it
 
     class Config:
-        from_attributes = True
+        from_attributes = True  # Enables ORM mode

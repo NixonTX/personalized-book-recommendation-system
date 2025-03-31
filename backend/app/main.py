@@ -2,6 +2,7 @@ from fastapi import FastAPI
 # Import routers from api/v1
 from .api.v1 import recommendations
 from backend.app.api.v1 import books
+from backend.app.api.v1 import users
 
 
 print("🐛 DEBUG: Starting app.py")
@@ -21,6 +22,8 @@ print("🐛 DEBUG: FastAPI app created")
 app.include_router(recommendations.router, prefix="/api/v1")
 
 app.include_router(books.router, prefix="/api/v1")
+app.include_router(users.router, prefix="/api/v1")
+
 
 
 @app.get("/")

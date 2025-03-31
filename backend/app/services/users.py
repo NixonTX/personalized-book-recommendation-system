@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from app.models.user import User
-from app.database.db import get_db
+from backend.app.models.user import User
+from backend.app.database.db import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.schemas.user import UserCreate
 import bcrypt
