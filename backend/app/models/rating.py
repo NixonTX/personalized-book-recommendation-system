@@ -16,3 +16,5 @@ class Rating(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User", back_populates="ratings")
+
+    book = relationship("Book", back_populates="ratings")

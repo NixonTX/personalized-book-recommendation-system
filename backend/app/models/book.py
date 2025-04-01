@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, Text
 from backend.app.database.db import Base
+from sqlalchemy.orm import relationship
 
 class Book(Base):
     __tablename__ = "books"
@@ -11,5 +12,4 @@ class Book(Base):
     description = Column(Text)
     cover_url = Column(String(255))
 
-    # class Config:
-    #     from_attributes = True
+    ratings = relationship("Rating", back_populates="book")
