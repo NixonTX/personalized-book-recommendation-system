@@ -12,5 +12,8 @@ class BookCreate(BookBase):
     pass
 
 class Book(BookBase):
+    average_rating: Optional[float] = Field(None, ge=1, le=5)
+    rating_count: Optional[int] = Field(None, ge=0)
+    
     class Config:
         from_attributes = True  # Allows ORM mode (formerly ORM_mode)

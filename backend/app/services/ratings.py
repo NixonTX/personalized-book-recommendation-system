@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 from backend.app.models.rating import Rating
 from backend.app.schemas.rating import RatingCreate
 from fastapi import HTTPException, status
+from backend.app.database.cache import redis_client
 
 
 async def rate_book(db: AsyncSession, user_id: int, rating_data: RatingCreate):
@@ -33,6 +34,8 @@ async def rate_book(db: AsyncSession, user_id: int, rating_data: RatingCreate):
     await db.commit()
     await db.refresh(db_rating if not existing else existing)
 
+    # Clear relevant caches
+    redis_client.delete(f"book:{rating_data.book_isbn}")
     return db_rating if not existing else existing
 
 async def delete_rating(db: AsyncSession, user_id: int, book_isbn: str):
@@ -52,6 +55,10 @@ async def delete_rating(db: AsyncSession, user_id: int, book_isbn: str):
     
     await db.delete(rating)
     await db.commit()
+
+    # Clear relevant caches
+    redis_client.delete(f"book:{book_isbn}")
+    
     return True
 
 async def get_user_ratings(

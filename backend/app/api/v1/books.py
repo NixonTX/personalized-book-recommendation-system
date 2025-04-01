@@ -5,14 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.models.book import Book as BookModel
 from backend.app.schemas.book import Book, BookCreate
 from backend.app.database.db import get_db
-from backend.app.services.books import get_book_details, create_book
+from backend.app.services.books import get_book_details, create_book,  get_book_with_ratings
 
 
 router = APIRouter()
 
-@router.get("/books/{isbn}", response_model=Book, responses={404: {"description": "Book not found"}})
+@router.get("/books/{isbn}", response_model=Book)
 async def read_book(isbn: str, db: AsyncSession = Depends(get_db)):
-    book = await get_book_details(db, isbn)
+    book = await get_book_with_ratings(db, isbn)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
     return book
