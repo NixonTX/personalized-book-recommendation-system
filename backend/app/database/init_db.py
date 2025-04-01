@@ -1,14 +1,8 @@
 import asyncio
-import sys
-from pathlib import Path
 from sqlalchemy import text
-
-sys.path.append(str(Path(__file__).parent.parent.parent))
-
-from app.database.db import engine, Base
+from backend.app.database.db import engine, Base, init_models
 
 async def initialize_database():
-    from backend.app.database.db import init_models
     init_models()
     
     async with engine.begin() as conn:
@@ -27,8 +21,14 @@ async def initialize_database():
         await conn.execute(text("SET search_path TO book_schema"))
         # # Create tables
         # await conn.run_sync(Base.metadata.create_all)
-        result = await conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'book_schema'"))
-        print("Book schema tables:", [row[0] for row in result.fetchall()])
+        result = await conn.execute(text("""
+            SELECT table_schema, table_name 
+            FROM information_schema.tables 
+            WHERE table_schema IN ('book_schema', 'user_schema')
+        """))
+        print("Existing tables:")
+        for row in result.fetchall():
+            print(f"- {row.table_schema}.{row.table_name}") 
 
 if __name__ == "__main__":
     asyncio.run(initialize_database())
