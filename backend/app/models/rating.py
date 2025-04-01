@@ -2,6 +2,7 @@
 from sqlalchemy import Column, Integer, ForeignKey, DateTime, String
 from sqlalchemy.sql import func
 from backend.app.database.db import Base
+from sqlalchemy.orm import relationship
 
 class Rating(Base):
     __tablename__ = 'ratings'
@@ -13,3 +14,5 @@ class Rating(Base):
     rating = Column(Integer, nullable=False)  # 1-5
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="ratings")

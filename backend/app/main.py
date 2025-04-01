@@ -24,9 +24,7 @@ app.include_router(recommendations.router, prefix="/api/v1")
 
 app.include_router(books.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
-app.include_router(ratings.router,  prefix="/api/v1")
-
-
+app.include_router(ratings.router, prefix="/api/v1")
 
 
 @app.get("/")

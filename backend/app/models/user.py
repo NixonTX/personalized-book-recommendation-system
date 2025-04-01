@@ -1,5 +1,7 @@
 from sqlalchemy import Boolean, Column, Integer, String
 from backend.app.database import Base
+from backend.app.models.rating import Rating
+from sqlalchemy.orm import relationship
 
 class User(Base):
     __tablename__ = "users"
@@ -10,3 +12,5 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
+
+    ratings = relationship("Rating", back_populates="user", cascade="all, delete")
