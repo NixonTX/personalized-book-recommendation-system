@@ -10,6 +10,7 @@ def init_models():
     from backend.app.models.rating import Rating
     from backend.app.models.book import Book
     from backend.app.models.user import User
+    from backend.app.models.bookmark import Bookmark
 
 AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 

@@ -13,3 +13,4 @@ class Book(Base):
     cover_url = Column(String(255))
 
     ratings = relationship("Rating", back_populates="book")
+    bookmarks = relationship("Bookmark", back_populates="book")

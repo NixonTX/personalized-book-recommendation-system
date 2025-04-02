@@ -14,3 +14,4 @@ class User(Base):
     is_active = Column(Boolean, default=True)
 
     ratings = relationship("Rating", back_populates="user", cascade="all, delete")
+    bookmarks = relationship("Bookmark", back_populates="user")
