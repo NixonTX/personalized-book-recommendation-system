@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from .api.v1 import recommendations
 from backend.app.api.v1 import books
 from backend.app.api.v1 import users
-from backend.app.api.v1 import ratings, bookmarks
+from backend.app.api.v1 import ratings, bookmarks, reviews
 
 
 print("🐛 DEBUG: Starting app.py")
@@ -26,6 +26,7 @@ app.include_router(books.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(ratings.router, prefix="/api/v1")
 app.include_router(bookmarks.router, prefix="/api/v1")
+app.include_router(reviews.router, prefix="/api/v1")
 
 
 

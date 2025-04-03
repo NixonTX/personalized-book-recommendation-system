@@ -15,3 +15,4 @@ class User(Base):
 
     ratings = relationship("Rating", back_populates="user", cascade="all, delete")
     bookmarks = relationship("Bookmark", back_populates="user")
+    reviews = relationship("Review", back_populates="user")

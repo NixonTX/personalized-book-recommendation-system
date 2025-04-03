@@ -1,3 +1,5 @@
+book_recommendation_backup.sql
+
 *.txt
 !requirements.txt
 
