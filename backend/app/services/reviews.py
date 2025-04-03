@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 from ..models.review import Review
 from ..models.book import Book
-from ..schemas.review import ReviewCreate, ReviewUpdate, ReviewStatus
+from ..schemas.review import ReviewCreate, ReviewOut, ReviewUpdate, ReviewStatus
 from ..database.cache import redis_client
 
 async def create_review(
@@ -91,7 +91,8 @@ async def get_book_reviews(
     book_isbn: str,
     page: int = 1,
     per_page: int = 10,
-    approved_only: bool = True
+    approved_only: bool = True # for development purposes
+    # approved_only: bool = False
 ):
     # Calculate offset
     offset = (page - 1) * per_page
@@ -115,8 +116,9 @@ async def get_book_reviews(
         .limit(per_page)
     )
     
+    reviews = result.scalars().all()
     return {
-        "reviews": result.scalars().all(),
+        "reviews": [ReviewOut.model_validate(r) for r in reviews],  # Use model_validate
         "total": total,
         "page": page,
         "per_page": per_page
