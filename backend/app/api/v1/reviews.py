@@ -17,7 +17,7 @@ from backend.app.database.db import get_db
 from backend.app.core.auth import get_current_user
 from backend.app.models.user import User
 
-router = APIRouter(tags=["Reviews"])
+router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
 @router.post("/", response_model=ReviewOut, status_code=status.HTTP_201_CREATED)
 async def create_new_review(
