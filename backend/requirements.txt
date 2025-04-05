@@ -3,3 +3,5 @@ redis         # Redis client
 sqlalchemy    # ORM
 psycopg2-binary  # PostgreSQL adapter (sync, optional)
 python-multipart # For file uploads (if needed)
+redis>=4.5.5
+hiredis>=2.0.0

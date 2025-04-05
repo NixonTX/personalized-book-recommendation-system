@@ -1,3 +1,4 @@
+# Global
 import os
 
 # Get the absolute path to L2/ (where utils/ folder lives)
