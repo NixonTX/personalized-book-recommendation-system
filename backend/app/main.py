@@ -1,10 +1,12 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 # Import routers from api/v1
 from .api.v1 import recommendations
 from backend.app.api.v1 import books
 from backend.app.api.v1 import users
 from backend.app.api.v1 import ratings, bookmarks, reviews, search
-
+from backend.utils import refresh_popular_books
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 print("🐛 DEBUG: Starting app.py")
 
@@ -15,7 +17,36 @@ except ImportError as e:
     print(f"❌ Import Error: {e}")
     raise
 
-app = FastAPI()
+
+# Define lifespan handler
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup logic
+    print("🐛 DEBUG: Starting up application")
+    await refresh_popular_books()  # Initial refresh
+    
+    # Setup scheduler
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        refresh_popular_books,
+        'interval',
+        hours=1  # Refresh every hour
+    )
+    scheduler.start()
+    print("🐛 DEBUG: Scheduler started for popular books refresh")
+    
+    try:
+        yield  # Application runs here
+    finally:
+        # Shutdown logic
+        print("🐛 DEBUG: Shutting down application")
+        scheduler.shutdown()
+        print("🐛 DEBUG: Scheduler stopped")
+
+# Create FastAPI app with lifespan
+app = FastAPI(lifespan=lifespan)
+
+# app = FastAPI()
 print("🐛 DEBUG: FastAPI app created")
 
 

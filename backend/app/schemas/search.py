@@ -1,6 +1,6 @@
 # backend/app/schemas/search.py
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=2)
@@ -23,3 +23,22 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     results: list[SearchResult]
     meta: dict
+
+class TitleSuggestion(BaseModel):
+    text: str
+    isbn: str
+    score: float
+
+class AuthorSuggestion(BaseModel):
+    name: str
+    book_count: int
+
+class PopularSuggestion(BaseModel):
+    title: str
+    isbn: str
+    rating: float
+
+class SuggestionResponse(BaseModel):
+    titles: List[TitleSuggestion] = Field(default_factory=list)
+    authors: List[AuthorSuggestion] = Field(default_factory=list)
+    popular: List[PopularSuggestion] = Field(default_factory=list)

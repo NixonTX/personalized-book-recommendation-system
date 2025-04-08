@@ -1,11 +1,17 @@
 # backend/app/services/search.py
+import asyncio
+import re
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import or_, select, func
+from sqlalchemy import or_, select, func, text
 from fastapi import HTTPException
+
+from backend.app.database.db import AsyncSessionLocal
 from ..models.book import Book
 from ..database.cache import redis_client
+from backend.utils.popular_books import refresh_popular_books
 import json
 import hashlib
+import sqlalchemy as sa
 
 async def search_books(
     db: AsyncSession,
@@ -17,6 +23,23 @@ async def search_books(
     page: int = 1,
     per_page: int = 10
 ):
+    suggestions = await get_search_suggestions(
+        db, 
+        query, 
+        limit_titles=0,  # We only want author suggestions here
+        limit_popular=0
+    )
+    
+    # Build boosted query conditions
+    boosted_conditions = []
+    if suggestions["authors"]:
+        author_names = [a["name"] for a in suggestions["authors"]]
+        boosted_conditions.append(Book.author.in_(author_names))
+    
+    # Add to your existing text_conditions
+    if boosted_conditions:
+        text_conditions.append(or_(*boosted_conditions))
+
     # Create consistent cache key
     params = {
         "query": query,
@@ -93,3 +116,108 @@ async def search_books(
         print(f"Cache set error: {e}")
     
     return response
+
+async def get_search_suggestions(
+    db: AsyncSession,
+    query: str,
+    limit_titles: int = 5,
+    limit_authors: int = 3,
+    limit_popular: int = 2
+):
+    # Validate and sanitize input
+    if len(query) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Query must be at least 2 characters"
+        )
+    
+    if not re.match(r'^[\w\s\-]+$', query):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid characters in query"
+        )
+    
+    cache_key = f"suggest:{query.lower()}"
+    
+    # Try cache first
+    if cached := await redis_client.get(cache_key):
+        return json.loads(cached)
+    
+    # Create new sessions for each query
+    async with AsyncSessionLocal() as title_session, \
+              AsyncSessionLocal() as author_session, \
+              AsyncSessionLocal() as popular_session:
+        
+        # Fetch title suggestions
+        title_query = select(
+            Book.isbn,
+            Book.title,
+            Book.author,
+            func.similarity(func.lower(Book.title), func.lower(query)).label("score")
+        ).where(
+            Book.title.ilike(f"{query}%")
+        ).order_by(
+            text("score DESC")
+        ).limit(limit_titles)
+        
+        # Fetch author suggestions
+        author_query = select(
+            Book.author,
+            func.count(Book.isbn).label("book_count")
+        ).where(
+            Book.author.ilike(f"{query}%")
+        ).group_by(
+            Book.author
+        ).order_by(
+            text("book_count DESC")
+        ).limit(limit_authors)
+        
+        # Fetch popular books (fallback)
+        popular_query = text("""
+    SELECT isbn, title, author, avg_rating 
+    FROM book_schema.popular_books
+    ORDER BY rating_count DESC
+    LIMIT :limit
+""").columns(
+    isbn=sa.String,
+    title=sa.String,
+    author=sa.String,
+    avg_rating=sa.Float
+)
+        
+        # Execute all queries
+        title_results = await title_session.execute(title_query)
+        author_results = await author_session.execute(author_query)
+        popular_results = await popular_session.execute(
+            popular_query, {"limit": limit_popular}
+        )
+        
+        # Commit sessions (not strictly necessary for read-only queries)
+        await title_session.commit()
+        await author_session.commit()
+        await popular_session.commit()
+        
+        # Format response
+        suggestions = {
+    "titles": [
+        {"text": r.title, "isbn": r.isbn, "score": float(r.score)} 
+        for r in title_results
+    ],
+    "authors": [
+        {"name": r.author, "book_count": r.book_count}
+        for r in author_results
+    ],
+    "popular": [
+        {"title": r.title, "isbn": r.isbn, "rating": float(r.avg_rating)}
+        for r in popular_results
+    ]
+}
+        
+        # Cache results
+        await redis_client.set(
+            cache_key,
+            json.dumps(suggestions),
+            ex=3600  # 1 hour
+        )
+        
+        return suggestions
