@@ -1,4 +1,5 @@
 # backend/app/schemas/search.py
+from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
@@ -62,3 +63,15 @@ class SuggestionResponse(BaseModel):
     titles: List[TitleSuggestion] = Field(default_factory=list)
     authors: List[AuthorSuggestion] = Field(default_factory=list)
     popular: List[PopularSuggestion] = Field(default_factory=list)
+
+class SearchHistoryItem(BaseModel):
+    query: str
+    timestamp: datetime
+    is_recent: bool
+
+class SearchHistoryResponse(BaseModel):
+    recent_searches: List[SearchHistoryItem]
+
+class DeleteHistoryResponse(BaseModel):
+    success: bool
+    message: str
