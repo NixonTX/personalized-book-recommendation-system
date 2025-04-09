@@ -7,6 +7,8 @@ from backend.app.api.v1 import users
 from backend.app.api.v1 import ratings, bookmarks, reviews, search
 from backend.utils import refresh_popular_books
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import asyncpg
+from backend.utils.config import settings
 
 print("🐛 DEBUG: Starting app.py")
 
@@ -23,6 +25,17 @@ except ImportError as e:
 async def lifespan(app: FastAPI):
     # Startup logic
     print("🐛 DEBUG: Starting up application")
+
+    # Setup pg_trgm extension
+    try:
+        conn = await asyncpg.connect(dsn=settings.DATABASE_URL.replace("+asyncpg", ""))
+        await conn.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+        await conn.close()
+        print("🐛 DEBUG: pg_trgm extension setup complete")
+    except Exception as e:
+        print(f"❌ Error setting up pg_trgm extension: {e}")
+        raise
+
     await refresh_popular_books()  # Initial refresh
     
     # Setup scheduler

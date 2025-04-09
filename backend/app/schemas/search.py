@@ -2,8 +2,28 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
+
+class SearchFilters(BaseModel):
+    genres: Optional[List[str]] = Field(
+        None, 
+        description="Filter by genre (exact match)"
+    )
+    min_rating: Optional[float] = Field(
+        None, ge=1, le=5, 
+        description="Minimum average rating (1-5)"
+    )
+    max_pages: Optional[int] = Field(
+        None, gt=0, 
+        description="Maximum page count"
+    )
+    author: Optional[str] = Field(
+        None, min_length=2, 
+        description="Partial author name match"
+    )
+
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=2)
+    filters: Optional[SearchFilters] = None
     author: Optional[str] = None
     genre: Optional[str] = None
     min_rating: Optional[float] = Field(None, ge=1, le=5)
