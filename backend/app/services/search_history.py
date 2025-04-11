@@ -6,6 +6,7 @@ from ..models.search_history import SearchHistory
 from sqlalchemy.ext.asyncio import AsyncSession
 import sqlalchemy as sa
 from sqlalchemy.exc import SQLAlchemyError
+from datetime import datetime, timezone
 
 class SearchHistoryService:
     @staticmethod
@@ -24,7 +25,7 @@ class SearchHistoryService:
             return
         
         normalized = SearchHistoryService._normalize_query(query)
-        now = datetime.utcnow().timestamp()
+        now = datetime.now(timezone.utc).timestamp()
         
         # Redis operations
         pipe = redis_client.pipeline()
@@ -59,7 +60,7 @@ class SearchHistoryService:
         )
         
         # Mark recent searches (last 24h)
-        one_day_ago = (datetime.utcnow() - timedelta(days=1)).timestamp()
+        one_day_ago = (datetime.now(timezone.utc) - timedelta(days=1)).timestamp()
         return [
             {
                 "query": item[0],

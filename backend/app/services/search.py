@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, or_, select, func, text
 from fastapi import HTTPException
 
-from backend.app.database.db import AsyncSessionLocal
+from backend.app.database.db import async_session
 from backend.app.schemas.search import SearchRequest
 from ..models.book import Book
 from ..database.cache import redis_client
@@ -191,9 +191,9 @@ async def get_search_suggestions(
         return json.loads(cached)
     
     # Create new sessions for each query
-    async with AsyncSessionLocal() as title_session, \
-              AsyncSessionLocal() as author_session, \
-              AsyncSessionLocal() as popular_session:
+    async with async_session() as title_session, \
+              async_session() as author_session, \
+              async_session() as popular_session:
         
         # Fetch title suggestions
         title_query = select(

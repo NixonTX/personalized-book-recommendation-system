@@ -6,14 +6,26 @@ SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://bookadmin:0123@localhost/book_re
 engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=True)
 Base = declarative_base()
 
+# def init_models():
+#     from backend.app.models.rating import Rating
+#     from backend.app.models.book import Book
+#     from backend.app.models.user import User
+#     from backend.app.models.bookmark import Bookmark
+
+# AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+# async def get_db():
+#     async with AsyncSessionLocal() as session:
+#         yield session
+
+async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+async def get_db():
+    async with async_session() as session:
+        yield session
+
 def init_models():
     from backend.app.models.rating import Rating
     from backend.app.models.book import Book
     from backend.app.models.user import User
     from backend.app.models.bookmark import Bookmark
-
-AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session
