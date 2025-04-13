@@ -19,6 +19,8 @@ from backend.utils.config import settings
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
+from backend.app.services.verification import create_verification_token, verify_token
+from backend.app.services.email import send_verification_email
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -27,7 +29,13 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 @router.post("/register", response_model=UserResponse)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     user = await create_user(db, user_data)
-    # TODO: Trigger email verification (not implemented here)
+    # Generate and send verification email
+    token = await create_verification_token(db, user.id)
+    try:
+        await send_verification_email(user.email, user.username, token)
+    except Exception as e:
+        # Log error but don't fail registration
+        print(f"Failed to send verification email: {e}")
     return user
 
 @router.post("/login", response_model=Token)
@@ -110,3 +118,8 @@ async def refresh_token(
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     return Token(access_token=access_token, refresh_token=refresh_token)
+
+@router.get("/verify-email/{token}", response_model=UserResponse)
+async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
+    user = await verify_token(db, token)
+    return user

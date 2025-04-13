@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Index, Integer, String, DateTime
 from sqlalchemy.sql import func
-from ..database.db import Base
+from backend.app.database.base import Base
 
 class SearchHistory(Base):
     __tablename__ = "search_history"

@@ -1,3 +1,4 @@
+// client/src/context/AuthContext.tsx
 import React, { createContext, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -8,7 +9,7 @@ interface AuthContextType {
   refreshToken: string | null;
   isAuthenticated: boolean;
   user: { username: string } | null;
-  login: (username: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -26,31 +27,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = useCallback(async (email: string, password: string) => {
     try {
       const response = await api.post('/auth/login', { email, password });
-      const { access_token, refresh_token } = response.data;
+      const { access_token, refresh_token, username } = response.data;
       setAccessToken(access_token);
       setRefreshToken(refresh_token);
-      setUser({ username: email }); // Temporarily use email; ideally fetch username from response
+      setUser({ username });
       setIsAuthenticated(true);
       toast.success('Logged in successfully!');
       navigate('/dashboard');
     } catch (error: any) {
       console.error('Login Failed:', error.response?.data);
-      toast.error(error.response?.data?.detail || 'Login failed');
+      const errorMessage = error.response?.data?.detail || 'Login failed';
+      if (errorMessage.includes('not activated')) {
+        toast.error('Please verify your email to activate your account.');
+      } else {
+        toast.error(errorMessage);
+      }
       throw error;
     }
   }, [navigate]);
 
   const register = useCallback(async (username: string, email: string, password: string) => {
     try {
-      const response = await api.post('/auth/register', { username, email, password });
-      const { access_token, refresh_token } = response.data;
-      setAccessToken(access_token);
-      setRefreshToken(refresh_token);
-      setUser({ username });
-      setIsAuthenticated(true);
-      toast.success('Registered successfully!');
-      navigate('/dashboard');
+      await api.post('/auth/register', { username, email, password });
+      toast.success('Registration successful! Please check your email to verify your account.');
+      navigate('/login');
     } catch (error: any) {
+      console.error('Registration Failed:', error.response?.data);
       toast.error(error.response?.data?.detail || 'Registration failed');
       throw error;
     }

@@ -1,7 +1,7 @@
 # backend/app/models/rating.py
 from sqlalchemy import Column, Integer, ForeignKey, DateTime, String
 from sqlalchemy.sql import func
-from backend.app.database.db import Base
+from backend.app.database.base import Base
 from sqlalchemy.orm import relationship
 
 class Rating(Base):

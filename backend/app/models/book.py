@@ -3,7 +3,7 @@ from sqlalchemy import Column, Integer, String, Text, Float
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy import Index
 from sqlalchemy.orm import relationship
-from backend.app.database.db import Base
+from backend.app.database.base import Base
 
 class Book(Base):
     __tablename__ = "books"
