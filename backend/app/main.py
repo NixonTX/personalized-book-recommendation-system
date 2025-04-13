@@ -4,11 +4,13 @@ from fastapi import FastAPI
 from .api.v1 import recommendations
 from backend.app.api.v1 import books
 from backend.app.api.v1 import users
-from backend.app.api.v1 import ratings, bookmarks, reviews, search
+from backend.app.api.v1 import ratings, bookmarks, reviews, search, auth
 from backend.utils import refresh_popular_books
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncpg
 from backend.utils.config import settings
+from backend.app.database.db import init_models
+from fastapi.middleware.cors import CORSMiddleware
 
 print("🐛 DEBUG: Starting app.py")
 
@@ -59,6 +61,14 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app with lifespan
 app = FastAPI(lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['http://localhost:5173'], # Your frontend URL
+    allow_credentials=True,
+    allow_methods=['*'], # Or ['GET', 'POST', etc.]
+    allow_headers=['*'],
+)
+
 # app = FastAPI()
 print("🐛 DEBUG: FastAPI app created")
 
@@ -72,6 +82,8 @@ app.include_router(ratings.router, prefix="/api/v1")
 app.include_router(bookmarks.router, prefix="/api/v1")
 app.include_router(reviews.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
+app.include_router(auth.router, prefix="/api/v1")
+
 
 
 @app.get("/")
