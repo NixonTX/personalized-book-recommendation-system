@@ -1,8 +1,8 @@
-// client/src/context/AuthContext.tsx
 import React, { createContext, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
+import {jwtDecode} from 'jwt-decode';
 
 interface AuthContextType {
   accessToken: string | null;
@@ -13,6 +13,12 @@ interface AuthContextType {
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+}
+
+interface JwtPayload {
+  sub: string;
+  jti: string;
+  iat?: number;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,16 +32,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = useCallback(async (email: string, password: string) => {
     try {
+      setAccessToken(null);
+      setRefreshToken(null);
+      setUser(null);
+      setIsAuthenticated(false);
+
       const response = await api.post('/auth/login', { email, password });
       const { access_token, refresh_token, username } = response.data;
+      const accessPayload: JwtPayload = jwtDecode(access_token);
+      const refreshPayload: JwtPayload = jwtDecode(refresh_token);
+      if (accessPayload.jti !== refreshPayload.jti) {
+        console.error('JTI mismatch:', { accessJti: accessPayload.jti, refreshJti: refreshPayload.jti });
+        throw new Error('Token JTI mismatch');
+      }
       setAccessToken(access_token);
       setRefreshToken(refresh_token);
       setUser({ username });
       setIsAuthenticated(true);
+      console.log('Login stored tokens:', {
+        accessToken: access_token.substring(0, 10),
+        accessJti: accessPayload.jti,
+        refreshToken: refresh_token.substring(0, 10),
+        refreshJti: refreshPayload.jti,
+        username
+      });
       toast.success('Logged in successfully!');
       navigate('/dashboard');
     } catch (error: any) {
-      console.error('Login Failed:', error.response?.data);
+      console.error('Login Failed:', error.response?.data || error.message);
       const errorMessage = error.response?.data?.detail || 'Login failed';
       if (errorMessage.includes('not activated')) {
         toast.error('Please verify your email to activate your account.');
@@ -60,6 +84,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = useCallback(async () => {
     try {
+      const accessPayload: JwtPayload = accessToken ? jwtDecode(accessToken) : { jti: 'none', sub: '' };
+      console.log('Logout with accessToken:', accessToken?.substring(0, 10), 'jti:', accessPayload.jti);
       await api.post('/auth/logout', {}, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
@@ -70,23 +96,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setRefreshToken(null);
       setUser(null);
       setIsAuthenticated(false);
+      console.log('Logged out, cleared tokens');
       toast.success('Logged out successfully!');
       navigate('/login');
     }
   }, [accessToken, navigate]);
 
   const refresh = useCallback(async () => {
-    try {
-      const response = await api.post('/auth/refresh', { refresh_token: refreshToken });
-      const { access_token, refresh_token } = response.data;
-      setAccessToken(access_token);
-      setRefreshToken(refresh_token);
-      setIsAuthenticated(true);
-    } catch (error) {
+    if (!refreshToken) {
+      console.error('No refresh token available');
       setAccessToken(null);
       setRefreshToken(null);
       setUser(null);
       setIsAuthenticated(false);
+      navigate('/login');
+      throw new Error('No refresh token');
+    }
+
+    try {
+      const refreshPayload: JwtPayload = jwtDecode(refreshToken);
+      console.log('Refreshing with token:', refreshToken.substring(0, 10), 'jti:', refreshPayload.jti);
+      const response = await api.post('/auth/refresh', { refresh_token: refreshToken });
+      const { access_token, refresh_token, username } = response.data;
+      const accessPayload: JwtPayload = jwtDecode(access_token);
+      const newRefreshPayload: JwtPayload = jwtDecode(refresh_token);
+      if (accessPayload.jti !== newRefreshPayload.jti) {
+        console.error('Refresh JTI mismatch:', { accessJti: accessPayload.jti, refreshJti: newRefreshPayload.jti });
+        throw new Error('Refresh token JTI mismatch');
+      }
+      setAccessToken(access_token);
+      setRefreshToken(refresh_token);
+      setUser({ username });
+      setIsAuthenticated(true);
+      console.log('Refresh stored tokens:', {
+        accessToken: access_token.substring(0, 10),
+        accessJti: accessPayload.jti,
+        refreshToken: refresh_token.substring(0, 10),
+        refreshJti: newRefreshPayload.jti,
+        username
+      });
+    } catch (error: any) {
+      console.error('Refresh Failed:', {
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      setAccessToken(null);
+      setRefreshToken(null);
+      setUser(null);
+      setIsAuthenticated(false);
+      toast.error('Session expired. Please log in again.');
       navigate('/login');
       throw error;
     }

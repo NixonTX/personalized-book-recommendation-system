@@ -10,6 +10,10 @@ from ..schemas.auth import UserCreate, Token
 from ..database.cache import redis_client
 from backend.utils.config import settings
 import uuid
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -31,24 +35,45 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
 
 async def create_access_token(data: dict, expires_delta: timedelta) -> str:
     to_encode = data.copy()
-    to_encode.update({"exp": datetime.now(timezone.utc) + expires_delta, "jti": str(uuid.uuid4())})
+    now = datetime.now(timezone.utc)
+    to_encode.update({
+        "iat": now,
+        "exp": now + expires_delta,
+    })
+    if "jti" not in to_encode:
+        to_encode["jti"] = str(uuid.uuid4())
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 async def create_session(
     db: AsyncSession, user_id: int, ip_address: str, user_agent: str
 ) -> str:
     session_id = str(uuid.uuid4())
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
     session = Session(
         id=session_id,
         user_id=user_id,
         ip_address=ip_address,
         user_agent=user_agent,
         created_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=7),  # 7-day session
+        expires_at=expires_at,
     )
     db.add(session)
-    await db.commit()
-    return session_id
+    for attempt in range(3):  # Retry up to 3 times
+        try:
+            await db.commit()
+            # Verify session was saved
+            result = await db.execute(select(Session).where(Session.id == session_id))
+            saved_session = result.scalars().first()
+            if saved_session:
+                logger.info(f"Session created: {session_id}, user_id: {user_id}, expires_at: {expires_at}")
+                return session_id
+            logger.error(f"Session {session_id} not found after commit, attempt {attempt + 1}")
+        except Exception as e:
+            logger.error(f"Failed to create session {session_id}, attempt {attempt + 1}: {e}")
+            await db.rollback()
+            if attempt == 2:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create session")
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Session creation failed after retries")
 
 async def blacklist_token(session_id: str, expiry: int = 86400) -> None:
     """
@@ -88,4 +113,4 @@ async def revoke_session(db: AsyncSession, session_id: str) -> None:
     if session:
         await db.delete(session)
         await db.commit()
-    await blacklist_token(session_id)
+    await blacklist_token(session_id, expiry=7*24*3600)

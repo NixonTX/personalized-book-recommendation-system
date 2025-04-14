@@ -1,4 +1,4 @@
-import { useEffect, useContext } from 'react';
+import { useContext, useEffect } from 'react';
 import { AuthContext } from '../context/AuthContext';
 
 export default function RefreshHandler() {
@@ -8,12 +8,19 @@ export default function RefreshHandler() {
     if (!authContext || !authContext.isAuthenticated) return;
 
     const refreshInterval = setInterval(async () => {
+      console.log('Attempting token refresh at', new Date().toISOString());
       try {
         await authContext.refresh();
-      } catch (error) {
-        // Redirect handled in AuthContext
+        console.log('Token refresh successful');
+      } catch (error: any) {
+        console.error('Token refresh failed:', {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data
+        });
+        authContext.logout();
       }
-    }, 10 * 60 * 1000); // Refresh every 10 minutes
+    }, 13 * 60 * 1000); // Refresh every 13 minutes
 
     return () => clearInterval(refreshInterval);
   }, [authContext]);
