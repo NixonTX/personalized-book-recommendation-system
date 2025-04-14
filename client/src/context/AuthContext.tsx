@@ -1,3 +1,5 @@
+// L2/client/src/context/AuthContext.tsx
+// Replace entire file (lines 1–200)
 import React, { createContext, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -13,6 +15,7 @@ interface AuthContextType {
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  revokeSession: (sessionId?: string) => Promise<void>;
 }
 
 interface JwtPayload {
@@ -150,6 +153,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [refreshToken, navigate]);
 
+  const revokeSession = useCallback(async (sessionId?: string) => {
+    try {
+      const currentJti = accessToken ? (jwtDecode<JwtPayload>(accessToken).jti) : null;
+      const response = await api.post(
+        '/auth/sessions/revoke',
+        { session_id: sessionId },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const { count } = response.data;
+      toast.success(sessionId ? 'Session revoked' : `Revoked ${count} other session${count === 1 ? '' : 's'}`);
+      if (sessionId === currentJti || (!sessionId && count > 0)) {
+        setAccessToken(null);
+        setRefreshToken(null);
+        setUser(null);
+        setIsAuthenticated(false);
+        navigate('/login');
+      }
+    } catch (error: any) {
+      console.error('Revoke Failed:', error.response?.data);
+      toast.error(error.response?.data?.detail || 'Failed to revoke session');
+      throw error;
+    }
+  }, [accessToken, navigate]);
+  
   const value = useMemo(
     () => ({
       accessToken,
@@ -160,8 +187,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       register,
       logout,
       refresh,
+      revokeSession,
     }),
-    [accessToken, refreshToken, isAuthenticated, user, login, register, logout, refresh]
+    [accessToken, refreshToken, isAuthenticated, user, login, register, logout, refresh, revokeSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
