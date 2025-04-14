@@ -1,10 +1,16 @@
 // L2/client/src/context/AuthContext.tsx
-// Replace entire file (lines 1–200)
-import React, { createContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
-import {jwtDecode} from 'jwt-decode';
+import { jwtDecode } from 'jwt-decode';
+import axios from 'axios';
+
+interface User {
+  id: number;
+  email: string;
+  username: string;
+}
 
 interface AuthContextType {
   accessToken: string | null;
@@ -86,28 +92,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [navigate]);
 
   const logout = useCallback(async () => {
-    try {
-      const accessPayload: JwtPayload = accessToken ? jwtDecode(accessToken) : { jti: 'none', sub: '' };
-      console.log('Logout with accessToken:', accessToken?.substring(0, 10), 'jti:', accessPayload.jti);
-      await api.post('/auth/logout', {}, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      setAccessToken(null);
-      setRefreshToken(null);
-      setUser(null);
-      setIsAuthenticated(false);
-      console.log('Logged out, cleared tokens');
-      toast.success('Logged out successfully!');
-      navigate('/login');
+    const accessPayload: JwtPayload = accessToken ? jwtDecode(accessToken) : { jti: 'none', sub: '' };
+    console.log('Logout with accessToken:', accessToken?.substring(0, 10), 'jti:', accessPayload.jti);
+    let retries = 1;
+    while (retries >= 0) {
+      try {
+        if (accessToken) {
+          await api.post('/auth/logout', {}, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          console.log('Logout API call succeeded, jti:', accessPayload.jti);
+        }
+        break;
+      } catch (error: any) {
+        console.error('Logout error:', {
+          status: error.response?.status,
+          data: error.response?.data,
+          retries,
+        });
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          break; // Expired token, proceed to clear
+        }
+        retries--;
+        if (retries < 0) {
+          console.warn('Logout API failed, clearing state anyway');
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
+    setAccessToken(null);
+    setRefreshToken(null);
+    setUser(null);
+    setIsAuthenticated(false);
+    console.log('Logged out, cleared tokens');
+    toast.success('Logged out successfully!');
+    navigate('/login');
   }, [accessToken, navigate]);
 
   const refresh = useCallback(async () => {
-    if (!refreshToken) {
-      console.error('No refresh token available');
+    if (!refreshToken || !isAuthenticated) {
+      console.error('No refresh token or not authenticated');
       setAccessToken(null);
       setRefreshToken(null);
       setUser(null);
@@ -151,7 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       navigate('/login');
       throw error;
     }
-  }, [refreshToken, navigate]);
+  }, [refreshToken, isAuthenticated, navigate]);
 
   const revokeSession = useCallback(async (sessionId?: string) => {
     try {
@@ -176,7 +200,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw error;
     }
   }, [accessToken, navigate]);
-  
+
   const value = useMemo(
     () => ({
       accessToken,

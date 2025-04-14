@@ -3,7 +3,7 @@ import React, { useContext, useEffect, useState, useCallback } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
-import {jwtDecode} from 'jwt-decode';
+import { jwtDecode } from 'jwt-decode';
 
 interface Session {
   id: string;
@@ -21,7 +21,7 @@ const Dashboard: React.FC = () => {
     throw new Error('AuthContext must be used within AuthProvider');
   }
 
-  const { user, accessToken, revokeSession } = authContext;
+  const { user, accessToken, revokeSession, logout } = authContext;
 
   const fetchSessions = useCallback(async () => {
     if (!accessToken) {
@@ -84,6 +84,13 @@ const Dashboard: React.FC = () => {
   return (
     <div>
       <h1>Welcome, {user?.username}</h1>
+      <button
+        onClick={logout}
+        disabled={isLoading}
+        className="mb-4 bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 disabled:bg-gray-400"
+      >
+        Log Out
+      </button>
       <h2>Active Sessions</h2>
       {isLoading && sessions.length === 0 ? (
         <p>Loading sessions...</p>
@@ -96,14 +103,22 @@ const Dashboard: React.FC = () => {
               <p>IP: {session.ip_address}</p>
               <p>Device: {session.user_agent}</p>
               <p>Created: {new Date(session.created_at).toLocaleString()}</p>
-              <button onClick={() => handleRevoke(session.id)} disabled={isLoading}>
+              <button
+                onClick={() => handleRevoke(session.id)}
+                disabled={isLoading}
+                className="bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600 disabled:bg-gray-400"
+              >
                 Revoke
               </button>
             </li>
           ))}
         </ul>
       )}
-      <button onClick={handleRevokeAll} disabled={isLoading}>
+      <button
+        onClick={handleRevokeAll}
+        disabled={isLoading}
+        className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 disabled:bg-gray-400"
+      >
         Revoke All Other Sessions
       </button>
     </div>

@@ -20,6 +20,7 @@ from backend.app.services.auth import (
     create_user,
     is_token_blacklisted,
 )
+
 from backend.app.database.db import get_db
 from backend.app.core.auth import get_current_user
 from backend.app.models.user import Session, User
@@ -102,26 +103,62 @@ async def login(
         "username": user.username
     }
 
-@router.post("/logout")
+@router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout(
+    request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
 ):
+    """
+    Log out the current user by deleting their session.
+    """
     try:
+        # Get token from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token"
+            )
+        token = auth_header[len("Bearer "):]
+        
+        # Decode token to get jti
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         session_id = payload.get("jti")
-        if session_id:
-            await blacklist_token(session_id, expiry=7*24*3600)  # 7 days for refresh token
-            # Delete session from database
-            result = await db.execute(select(Session).where(Session.id == session_id))
-            session = result.scalars().first()
-            if session:
-                await db.delete(session)
-                await db.commit()
-    except jwt.JWTError:
-        pass
-    return {"message": "Successfully logged out"}
+        user_id = current_user.id
+
+        # Verify session exists
+        result = await db.execute(
+            select(Session).where(Session.id == session_id, Session.user_id == user_id)
+        )
+        session = result.scalars().first()
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session not found"
+            )
+
+        # Delete session
+        await db.execute(
+            delete(Session).where(Session.id == session_id, Session.user_id == user_id)
+        )
+        await db.commit()
+        logger.info(f"Logged out user {current_user.email}, session: {session_id}")
+
+        return {"message": "Logged out successfully"}
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+    except Exception as e:
+        logger.error(f"Logout error for user {current_user.email}: {str(e)}")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Logout failed"
+        )
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(
@@ -306,9 +343,6 @@ async def list_sessions(
 async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     user = await verify_token(db, token)
     return user
-
-# L2/backend/app/api/v1/auth.py
-# Add after `verify_email` function (around line 160–170)
 
 @router.get("/debug/session/{session_id}")
 async def debug_session(session_id: str, db: AsyncSession = Depends(get_db)):
