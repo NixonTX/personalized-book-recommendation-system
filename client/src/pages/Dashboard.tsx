@@ -45,11 +45,18 @@ const Dashboard: React.FC = () => {
       });
     } catch (error: any) {
       console.error('Failed to fetch sessions:', error.response?.data);
-      toast.error(error.response?.data?.detail || 'Failed to load sessions');
+      const status = error.response?.status;
+      const message = status === 401 ? 'Session expired. Logging out.' :
+                      status === 500 ? 'Server error. Please try again later.' :
+                      'Failed to load sessions.';
+      toast.error(message);
+      if (status === 401) {
+        logout();
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]); // Removed isLoading dependency
+  }, [accessToken, logout]);
 
   useEffect(() => {
     fetchSessions();

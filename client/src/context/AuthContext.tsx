@@ -110,12 +110,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           data: error.response?.data,
           retries,
         });
-        if (error.response?.status === 401 || error.response?.status === 403) {
+        const status = error.response?.status;
+        if (status === 401) {
+          toast.error('Session expired. Logged out.');
           break; // Expired token, proceed to clear
+        } else if (status === 500) {
+          toast.error('Server error during logout. Clearing session.');
         }
         retries--;
         if (retries < 0) {
           console.warn('Logout API failed, clearing state anyway');
+          toast.error('Logout failed, session cleared.');
         }
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
@@ -139,7 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       navigate('/login');
       throw new Error('No refresh token');
     }
-
+  
     try {
       const refreshPayload: JwtPayload = jwtDecode(refreshToken);
       console.log('Refreshing with token:', refreshToken.substring(0, 10), 'jti:', refreshPayload.jti);
@@ -167,11 +172,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: error.response?.status,
         data: error.response?.data,
       });
+      const status = error.response?.status;
+      const message = status === 401 ? 'Session expired. Please log in again.' :
+                      status === 500 ? 'Server error. Please try again later.' :
+                      'Failed to refresh session.';
+      toast.error(message);
       setAccessToken(null);
       setRefreshToken(null);
       setUser(null);
       setIsAuthenticated(false);
-      toast.error('Session expired. Please log in again.');
       navigate('/login');
       throw error;
     }
@@ -179,7 +188,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const revokeSession = useCallback(async (sessionId?: string) => {
     try {
-      const currentJti = accessToken ? (jwtDecode<JwtPayload>(accessToken).jti) : null;
       const response = await api.post(
         '/auth/sessions/revoke',
         { session_id: sessionId },
@@ -187,7 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       const { count } = response.data;
       toast.success(sessionId ? 'Session revoked' : `Revoked ${count} other session${count === 1 ? '' : 's'}`);
-      if (sessionId === currentJti || (!sessionId && count > 0)) {
+      if (sessionId && sessionId === (accessToken ? jwtDecode<JwtPayload>(accessToken).jti : null)) {
         setAccessToken(null);
         setRefreshToken(null);
         setUser(null);
@@ -196,8 +204,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error: any) {
       console.error('Revoke Failed:', error.response?.data);
-      toast.error(error.response?.data?.detail || 'Failed to revoke session');
-      throw error;
+      const status = error.response?.status;
+      const message = status === 401 ? 'Session expired. Logging out.' :
+                      status === 500 ? 'Server error. Please try again later.' :
+                      'Failed to revoke session.';
+      toast.error(message);
+      if (status === 401) {
+        setAccessToken(null);
+        setRefreshToken(null);
+        setUser(null);
+        setIsAuthenticated(false);
+        navigate('/login');
+      }
     }
   }, [accessToken, navigate]);
 

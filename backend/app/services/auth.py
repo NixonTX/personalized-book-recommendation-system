@@ -79,13 +79,23 @@ async def blacklist_token(session_id: str, expiry: int = 86400) -> None:
     """
     Blacklist a token in Redis with a default TTL of 24 hours.
     """
-    await redis_client.setex(f"blacklist:{session_id}", expiry, "1")
+    try:
+        result = await redis_client.setex(f"blacklist:{session_id}", expiry, "1")
+        logger.info(f"Blacklisted token {session_id} in Redis, result: {result}")
+    except Exception as e:
+        logger.error(f"Failed to blacklist token {session_id} in Redis: {str(e)}")
 
 async def is_token_blacklisted(session_id: str) -> bool:
     """
     Check if a token is blacklisted in Redis.
     """
-    return await redis_client.exists(f"blacklist:{session_id}")
+    try:
+        result = await redis_client.exists(f"blacklist:{session_id}")
+        logger.debug(f"Checked blacklist for {session_id}, exists: {bool(result)}")
+        return bool(result)
+    except Exception as e:
+        logger.error(f"Failed to check blacklist for {session_id}: {str(e)}")
+        return False
 
 async def create_user(db: AsyncSession, user_data: UserCreate) -> User:
     result = await db.execute(

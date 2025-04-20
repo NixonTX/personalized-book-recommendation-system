@@ -64,10 +64,6 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Clear existing sessions
-    await db.execute(delete(Session).where(Session.user_id == user.id))
-    await db.commit()
-
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     session_id = await create_session(
         db, user.id, request.client.host, request.headers.get("User-Agent", "")
@@ -105,7 +101,7 @@ async def login(
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout(
-    request: Request,
+    token: str = Depends(oauth2_scheme),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -113,15 +109,6 @@ async def logout(
     Log out the current user by deleting their session.
     """
     try:
-        # Get token from Authorization header
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token"
-            )
-        token = auth_header[len("Bearer "):]
-        
         # Decode token to get jti
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         session_id = payload.get("jti")
@@ -133,25 +120,21 @@ async def logout(
         )
         session = result.scalars().first()
         if not session:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Session not found"
-            )
+            logger.warning(f"Session {session_id} not found for user {current_user.email}")
+            return {"message": "Session already invalid or logged out"}
 
-        # Delete session
-        await db.execute(
-            delete(Session).where(Session.id == session_id, Session.user_id == user_id)
-        )
+        # Blacklist and delete session
+        await blacklist_token(session_id, expiry=7*24*3600)
+        logger.info(f"Blacklisted session {session_id} for user {current_user.email}")
+        await db.delete(session)
         await db.commit()
         logger.info(f"Logged out user {current_user.email}, session: {session_id}")
 
         return {"message": "Logged out successfully"}
 
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
+    except JWTError as e:
+        logger.error(f"JWT decode error for user {current_user.email}: {str(e)}")
+        return {"message": "Session already invalid or logged out"}
     except Exception as e:
         logger.error(f"Logout error for user {current_user.email}: {str(e)}")
         await db.rollback()
@@ -189,47 +172,37 @@ async def refresh_token(
         logger.error(f"JWT decode error: {e}")
         raise credentials_exception
 
-    result = await db.execute(select(Session).where(Session.user_id == (select(User.id).where(User.email == email).scalar_subquery())))
-    all_sessions = result.scalars().all()
-    logger.info(f"User sessions: {[s.id for s in all_sessions]}")
-
+    # Fetch session
     result = await db.execute(select(Session).where(Session.id == session_id))
     session = result.scalars().first()
     if not session:
         logger.error(f"Session not found: {session_id}")
-        await blacklist_token(session_id, expiry=7*24*3600)
         raise credentials_exception
     if session.expires_at < datetime.now(timezone.utc):
         logger.error(f"Session expired: {session_id}, expires_at: {session.expires_at}")
-        await blacklist_token(session_id, expiry=7*24*3600)
         await db.delete(session)
         await db.commit()
         raise credentials_exception
 
-    # Validate IP and user-agent
+    # Log IP and user-agent for debugging, but don't fail
     current_ip = req.client.host
     current_user_agent = req.headers.get("User-Agent", "")
     if session.ip_address != current_ip:
-        logger.warning(f"IP mismatch for session {session_id}: stored {session.ip_address}, current {current_ip}")
-        # Allow minor IP changes (e.g., mobile networks); log for now
+        logger.info(f"IP changed for session {session_id}: stored {session.ip_address}, current {current_ip}")
     if session.user_agent != current_user_agent:
-        logger.warning(f"User-agent mismatch for session {session_id}: stored {session.user_agent}, current {current_user_agent}")
-        # Allow browser updates; log for now
+        logger.info(f"User-agent changed for session {session_id}: stored {session.user_agent}, current {current_user_agent}")
 
-    logger.info(f"Session valid: {session_id}, user_id: {session.user_id}, expires_at: {session.expires_at}")
-
+    # Fetch user
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalars().first()
     if user is None or not user.is_active:
         logger.error(f"User not found or inactive: {email}")
-        await blacklist_token(session_id, expiry=7*24*3600)
         await db.delete(session)
         await db.commit()
         raise credentials_exception
 
-    new_session_id = await create_session(
-        db, user.id, current_ip, current_user_agent
-    )
+    # Create new session
+    new_session_id = await create_session(db, user.id, current_ip, current_user_agent)
     access_token = await create_access_token(
         data={"sub": user.email, "jti": new_session_id},
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
@@ -239,15 +212,13 @@ async def refresh_token(
         expires_delta=timedelta(days=7),
     )
 
+    # Delete old session (no blacklisting to avoid conflicts)
     try:
-        await db.commit()
-        await blacklist_token(session_id, expiry=7*24*3600)
-        logger.info(f"Blacklisted old session: {session_id}")
         await db.delete(session)
         await db.commit()
         logger.info(f"Deleted old session: {session_id}")
     except Exception as e:
-        logger.error(f"Error updating session: {e}")
+        logger.error(f"Error deleting old session {session_id}: {e}")
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Session update failed")
 
@@ -261,7 +232,7 @@ async def refresh_token(
 @router.post("/sessions/revoke")
 async def revoke_session(
     request: RevokeSessionRequest,
-    req: Request,
+    token: str = Depends(oauth2_scheme),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -279,7 +250,8 @@ async def revoke_session(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Session not found"
                 )
-            await blacklist_token(request.session_id, expiry=7*24*3600)
+            await blacklist_token(str(session.id), expiry=7*24*3600)
+            logger.info(f"Blacklisted session {request.session_id} for user {user.email}")
             await db.delete(session)
             await db.commit()
             logger.info(f"Revoked session {request.session_id} for user {user.email}")
@@ -287,9 +259,7 @@ async def revoke_session(
         else:
             # Revoke all sessions except current
             current_session_id = jwt.decode(
-                req.headers.get("Authorization").split()[1],
-                settings.SECRET_KEY,
-                algorithms=[settings.ALGORITHM]
+                token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
             )["jti"]
             result = await db.execute(
                 select(Session).where(Session.user_id == user.id, Session.id != current_session_id)
@@ -298,12 +268,19 @@ async def revoke_session(
             count = len(sessions)
             for session in sessions:
                 await blacklist_token(str(session.id), expiry=7*24*3600)
+                logger.info(f"Blacklisted session {session.id} for user {user.email}")
                 await db.delete(session)
             await db.commit()
             logger.info(f"Revoked {count} sessions for user {user.email}, kept {current_session_id}")
             return {"detail": "Sessions revoked", "count": count}
+    except JWTError as e:
+        logger.error(f"JWT decode error for user {user.email}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
     except Exception as e:
-        logger.error(f"Revoke error for user {user.email}: {e}")
+        logger.error(f"Revoke error for user {user.email}: {str(e)}")
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -318,9 +295,13 @@ async def list_sessions(
     logger.info(f"Listing sessions for user {user.email}")
     try:
         result = await db.execute(
-            select(Session).where(Session.user_id == user.id)
+            select(Session).where(
+                Session.user_id == user.id,
+                Session.expires_at > datetime.now(timezone.utc)
+            )
         )
         sessions = result.scalars().all()
+        logger.debug(f"Found {len(sessions)} active sessions for user {user.email}")
         return {
             "sessions": [
                 {
@@ -333,7 +314,7 @@ async def list_sessions(
             ]
         }
     except Exception as e:
-        logger.error(f"Error listing sessions for user {user.email}: {e}")
+        logger.error(f"Error listing sessions for user {user.email}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to list sessions"
