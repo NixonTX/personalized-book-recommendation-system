@@ -1,0 +1,29 @@
+{
+    "python.defaultInterpreterPath": "/home/nixontx/Desktop/ML/mlenv/bin/python",
+    "python.analysis.extraPaths": [
+        "./backend",
+        "./backend/app",
+        "./model/P_R_M",
+        "./utils"
+    ],
+    "python.languageServer": "Pylance",
+    "python.analysis.typeCheckingMode": "off",
+    "python.analysis.diagnosticMode": "workspace",
+    
+    "python.analysis.indexing": true,
+    "python.analysis.useLibraryCodeForTypes": true,
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportMissingImports": "none",
+        "reportMissingModuleSource": "none",
+        "reportUndefinedVariable": "warning",
+        "reportGeneralTypeIssues": "none"
+    },
+    "python.analysis.completeFunctionParens": true,
+    "terminal.integrated.env.linux": {
+        "PYTHONPATH": "${workspaceFolder}/backend:${workspaceFolder}/backend/app:${workspaceFolder}/model/P_R_M:${workspaceFolder}/utils",
+        "PATH": "/home/nixontx/Desktop/ML/mlenv/bin:${env:PATH}"
+    },
+    "terminal.integrated.defaultProfile.linux": "bash",
+    "terminal.integrated.inheritEnv": true,
+    "terminal.integrated.automationShell.linux": "bash"
+}
