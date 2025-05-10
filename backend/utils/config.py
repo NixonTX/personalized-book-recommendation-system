@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     EMAIL_SENDER: str
 
     ENVIRONMENT: str = "development"
+
+    GOOGLE_BOOKS_API_KEY: str
     
     class Config:
         env_file = ".env"
