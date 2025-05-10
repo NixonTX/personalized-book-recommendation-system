@@ -7,8 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.models import user
 from backend.app.models.user import Session
 # Import routers from api/v1
-from .api.v1 import recommendations
-from backend.app.api.v1 import books, users, ratings, bookmarks, reviews, search, auth
+from backend.app.api.v1 import books, users, ratings, bookmarks, reviews, search, auth, recommendations
 from backend.utils import refresh_popular_books
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncpg

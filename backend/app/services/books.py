@@ -9,9 +9,11 @@ import json
 
 async def get_book_details(db: AsyncSession, isbn: str):
     # Check cache first
-    cached_book = redis_client.get(f"book:{isbn}")
+    cached_book = await redis_client.get(f"book:{isbn}")
     if cached_book:
-        cached_data = json.loads(cached_book)
+        # Handle bytes or str from Redis
+        cached_book_str = cached_book.decode('utf-8') if isinstance(cached_book, bytes) else cached_book
+        cached_data = json.loads(cached_book_str)
         return BookSchema(**cached_data)  # Return Pydantic schema
     
     # Query database - use BookModel for SQLAlchemy query
