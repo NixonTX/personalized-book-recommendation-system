@@ -2,11 +2,12 @@
 import os
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
+from backend.app.database.db import DB_USER, DB_PASS, DB_HOST, DB_NAME
 
 load_dotenv()
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://bookadmin:0123@localhost/book_recommendation")
+    DATABASE_URL: str = "postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}/{DB_NAME}"
 
     SECRET_KEY: str = "your-secure-secret-key"  # Replace with a strong key
     ALGORITHM: str = "HS256"

@@ -15,6 +15,7 @@ from backend.utils.config import settings
 from backend.app.database.db import init_models, async_session, engine
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -43,12 +44,24 @@ async def cleanup_expired_sessions():
 # Define lifespan handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup logic
-    print("🐛 DEBUG: Starting up application")
+    #print("🐛 DEBUG: Starting up application")
+    
+    # Single database setup block using SQLAlchemy
+    async with engine.begin() as conn:
+        # Create extension and tables in one transaction
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+        await conn.run_sync(user.Base.metadata.create_all)
+    
+    print("🐛 DEBUG: Database setup complete")
 
     # Setup pg_trgm extension
     try:
-        conn = await asyncpg.connect(dsn=settings.DATABASE_URL.replace("+asyncpg", ""))
+        # conn = await asyncpg.connect(dsn=settings.DATABASE_URL.replace("+asyncpg", ""))
+        from urllib.parse import unquote
+        raw_url = unquote(settings.DATABASE_URL)  # Decode URL-encoded characters
+        clean_url = raw_url.replace("+asyncpg", "")
+        conn = await asyncpg.connect(dsn=clean_url)
+
         await conn.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
         await conn.close()
         print("🐛 DEBUG: pg_trgm extension setup complete")

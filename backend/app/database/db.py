@@ -1,8 +1,16 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from ..models.verification import VerificationToken
+from urllib.parse import quote_plus
 
-SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://bookadmin:0123@localhost/book_recommendation"
+# SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://bookadmin:0123@localhost/book_recommendation"
+
+DB_USER = "bookadmin"
+DB_PASS = "0123"
+DB_HOST = "localhost"
+DB_NAME = "book_recommendation"
+
+SQLALCHEMY_DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}/{DB_NAME}"
 
 engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=True)
 Base = declarative_base()
