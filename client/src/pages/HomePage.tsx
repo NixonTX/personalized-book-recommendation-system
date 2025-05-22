@@ -13,7 +13,7 @@ export default function HomePage() {
             </div>
             <div className="flex items-center space-x-4">
               <Link
-                to="/login"
+                to="/auth/login"
                 className="text-sm text-blue-600 hover:text-blue-800"
               >
                 Sign In
@@ -41,7 +41,7 @@ export default function HomePage() {
 
           <div className="flex justify-center space-x-4">
             <Link
-              to="/login"
+              to="/auth/login"
               className="px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700"
             >
               Sign In

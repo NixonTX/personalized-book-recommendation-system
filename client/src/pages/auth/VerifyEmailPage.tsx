@@ -21,7 +21,7 @@ export default function VerifyEmailPage() {
       try {
         await api.get(`/auth/verify-email/${token}`);
         toast.success('Email verified successfully! You can now log in.');
-        navigate('/login');
+        navigate('/auth/login');
       } catch (err: any) {
         console.error('Verification failed:', err.response?.data);
         setError(err.response?.data?.detail || 'Verification failed');

@@ -1,6 +1,5 @@
 // L2/client/src/context/AuthContext.tsx
-import React, { createContext, useState, useCallback, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { createContext, useState, useCallback, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
 import jwtDecode from 'jwt-decode';
@@ -17,11 +16,11 @@ interface AuthContextType {
   refreshToken: string | null;
   isAuthenticated: boolean;
   user: { username: string } | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (username: string, email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  refresh: () => Promise<void>;
-  revokeSession: (sessionId?: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<{ success: boolean, error?: string }>;
+  register: (username: string, email: string, password: string) => Promise<{ success: boolean, error?: string }>;
+  logout: () => Promise<{ success: boolean, error?: string }>;
+  refresh: () => Promise<{ success: boolean, error?: string }>;
+  revokeSession: (sessionId?: string) => Promise<{ success: boolean, error?: string, isCurrentSession?: boolean }>;
 }
 
 interface JwtPayload {
@@ -37,7 +36,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [user, setUser] = useState<{ username: string } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const navigate = useNavigate();
 
   const login = useCallback(async (email: string, password: string) => {
     try {
@@ -66,7 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         username
       });
       toast.success('Logged in successfully!');
-      navigate('/dashboard');
+      return { success: true };
     } catch (error: any) {
       console.error('Login Failed:', error.response?.data || error.message);
       const errorMessage = error.response?.data?.detail || 'Login failed';
@@ -75,21 +73,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         toast.error(errorMessage);
       }
-      throw error;
+      return { success: false, error: errorMessage };
     }
-  }, [navigate]);
+  }, []);
 
   const register = useCallback(async (username: string, email: string, password: string) => {
     try {
       await api.post('/auth/register', { username, email, password });
       toast.success('Registration successful! Please check your email to verify your account.');
-      navigate('/login');
+      return { success: true };
     } catch (error: any) {
       console.error('Registration Failed:', error.response?.data);
-      toast.error(error.response?.data?.detail || 'Registration failed');
-      throw error;
+      const errorMessage = error.response?.data?.detail || 'Registration failed';
+      toast.error(errorMessage);
+      return { success: false, error: errorMessage };
     }
-  }, [navigate]);
+  }, []);
 
   const logout = useCallback(async () => {
     const accessPayload: JwtPayload = accessToken ? jwtDecode(accessToken) : { jti: 'none', sub: '' };
@@ -113,7 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const status = error.response?.status;
         if (status === 401) {
           toast.error('Session expired. Logged out.');
-          break; // Expired token, proceed to clear
+          break;
         } else if (status === 500) {
           toast.error('Server error during logout. Clearing session.');
         }
@@ -131,8 +130,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsAuthenticated(false);
     console.log('Logged out, cleared tokens');
     toast.success('Logged out successfully!');
-    navigate('/login');
-  }, [accessToken, navigate]);
+    return { success: true };
+  }, [accessToken]);
 
   const refresh = useCallback(async () => {
     if (!refreshToken || !isAuthenticated) {
@@ -141,10 +140,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setRefreshToken(null);
       setUser(null);
       setIsAuthenticated(false);
-      navigate('/login');
-      throw new Error('No refresh token');
+      return { success: false, error: 'No refresh token' };
     }
-  
+
     try {
       const refreshPayload: JwtPayload = jwtDecode(refreshToken);
       console.log('Refreshing with token:', refreshToken.substring(0, 10), 'jti:', refreshPayload.jti);
@@ -167,6 +165,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         refreshJti: newRefreshPayload.jti,
         username
       });
+      return { success: true };
     } catch (error: any) {
       console.error('Refresh Failed:', {
         status: error.response?.status,
@@ -181,10 +180,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setRefreshToken(null);
       setUser(null);
       setIsAuthenticated(false);
-      navigate('/login');
-      throw error;
+      return { success: false, error: message };
     }
-  }, [refreshToken, isAuthenticated, navigate]);
+  }, [refreshToken, isAuthenticated]);
 
   const revokeSession = useCallback(async (sessionId?: string) => {
     try {
@@ -195,13 +193,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       const { count } = response.data;
       toast.success(sessionId ? 'Session revoked' : `Revoked ${count} other session${count === 1 ? '' : 's'}`);
-      if (sessionId && sessionId === (accessToken ? jwtDecode<JwtPayload>(accessToken).jti : null)) {
+
+      const isCurrentSession = !!sessionId && sessionId === (accessToken ? jwtDecode<JwtPayload>(accessToken).jti : null);
+      
+      if (isCurrentSession) {
         setAccessToken(null);
         setRefreshToken(null);
         setUser(null);
         setIsAuthenticated(false);
-        navigate('/login');
       }
+      return { success: true, isCurrentSession };
     } catch (error: any) {
       console.error('Revoke Failed:', error.response?.data);
       const status = error.response?.status;
@@ -214,10 +215,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setRefreshToken(null);
         setUser(null);
         setIsAuthenticated(false);
-        navigate('/login');
+        return { success: false, error: message, isCurrentSession: true };
       }
+      return { success: false, error: message };
     }
-  }, [accessToken, navigate]);
+  }, [accessToken]);
 
   const value = useMemo(
     () => ({

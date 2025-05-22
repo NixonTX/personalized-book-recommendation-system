@@ -1,6 +1,5 @@
 import { useState, useContext } from 'react';
-import { Link } from 'react-router-dom';
-import { toast } from 'react-toastify';
+import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 
 export default function RegisterPage() {
@@ -9,6 +8,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const authContext = useContext(AuthContext);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,9 +16,12 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      await authContext.register(username, email, password);
+      const result = await authContext.register(username, email, password);
+      if(result.success) {
+        navigate('/auth/login');
+      }
     } catch (error) {
-      // Error handled in AuthContext
+      // Error handled in AuthContext via toast
     } finally {
       setLoading(false);
     }
@@ -92,7 +95,7 @@ export default function RegisterPage() {
 
       <div className="mt-6">
         <Link
-          to="/login"
+          to="/auth/login"
           className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           Already have an account? Sign in

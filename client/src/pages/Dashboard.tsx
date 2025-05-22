@@ -4,6 +4,7 @@ import { AuthContext } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
 import jwtDecode from 'jwt-decode';
+import { useNavigate } from 'react-router-dom';
 
 interface Session {
   id: string;
@@ -14,6 +15,7 @@ interface Session {
 
 const Dashboard: React.FC = () => {
   const authContext = useContext(AuthContext);
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -21,23 +23,21 @@ const Dashboard: React.FC = () => {
     throw new Error('AuthContext must be used within AuthProvider');
   }
 
-  const { user, accessToken, revokeSession, logout } = authContext;
+  const { user, accessToken, logout } = authContext;
 
   const fetchSessions = useCallback(async () => {
     if (!accessToken) {
       toast.error('No access token available');
       return;
     }
-    if (isLoading) return; // Prevent concurrent fetches
+    if (isLoading) return;
     setIsLoading(true);
     try {
       const response = await api.get('/auth/sessions', {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      // Stable state update
       setSessions((prev) => {
         const newSessions = response.data.sessions;
-        // Only update if sessions differ to prevent render loops
         if (JSON.stringify(prev) !== JSON.stringify(newSessions)) {
           return newSessions;
         }
@@ -52,82 +52,83 @@ const Dashboard: React.FC = () => {
       toast.error(message);
       if (status === 401) {
         logout();
+        navigate('/auth/login');
       }
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, logout]);
+  }, [accessToken, logout, navigate]);
 
   useEffect(() => {
     fetchSessions();
-    // Optional: Poll every 30s for real-time updates (controlled)
     const interval = setInterval(fetchSessions, 30000);
-    return () => clearInterval(interval); // Cleanup
+    return () => clearInterval(interval);
   }, [fetchSessions]);
 
-  const handleRevoke = async (sessionId: string) => {
-    if (isLoading) return;
-    try {
-      await revokeSession(sessionId);
-      // Update sessions locally to avoid re-fetch
-      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-    } catch (error) {
-      // Error handled in revokeSession
-    }
+  const handleNavigateToSessions = () => {
+    navigate('/sessions');
   };
 
-  const handleRevokeAll = async () => {
-    if (isLoading) return;
+  const handleLogout = async () => {
     try {
-      await revokeSession();
-      // Keep only current session
-      const currentJti = accessToken ? jwtDecode<{ jti: string }>(accessToken).jti : '';
-      setSessions((prev) => prev.filter((s) => s.id === currentJti));
+      const result = await logout();
+      if (result.success) {
+        navigate('/auth/login');
+      }
     } catch (error) {
-      // Error handled in revokeSession
+      // handled in AuthContext via toast
     }
   };
 
   return (
-    <div>
-      <h1>Welcome, {user?.username}</h1>
-      <button
-        onClick={logout}
-        disabled={isLoading}
-        className="mb-4 bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 disabled:bg-gray-400"
-      >
-        Log Out
-      </button>
-      <h2>Active Sessions</h2>
-      {isLoading && sessions.length === 0 ? (
-        <p>Loading sessions...</p>
-      ) : sessions.length === 0 ? (
-        <p>No active sessions</p>
-      ) : (
-        <ul>
-          {sessions.map((session) => (
-            <li key={session.id}>
-              <p>IP: {session.ip_address}</p>
-              <p>Device: {session.user_agent}</p>
-              <p>Created: {new Date(session.created_at).toLocaleString()}</p>
-              <button
-                onClick={() => handleRevoke(session.id)}
-                disabled={isLoading}
-                className="bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600 disabled:bg-gray-400"
-              >
-                Revoke
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <button
-        onClick={handleRevokeAll}
-        disabled={isLoading}
-        className="mt-4 bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 disabled:bg-gray-400"
-      >
-        Revoke All Other Sessions
-      </button>
+    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h1 style={{ fontSize: '24px', color: '#333' }}>Welcome, {user?.username}</h1>
+        <div>
+          <button
+            onClick={handleNavigateToSessions}
+            disabled={isLoading}
+            style={{
+              marginRight: '10px',
+              padding: '8px 16px',
+              backgroundColor: '#007bff',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              opacity: isLoading ? 0.6 : 1,
+              fontSize: '14px',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#0056b3')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#007bff')}
+          >
+            Manage Sessions
+          </button>
+          <button
+            onClick={handleLogout}
+            disabled={isLoading}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#dc3545',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              opacity: isLoading ? 0.6 : 1,
+              fontSize: '14px',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#a71d2a')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#dc3545')}
+          >
+            Log Out
+          </button>
+        </div>
+      </div>
+      {/* Placeholder for book search functionality */}
+      <div>
+        <h2 style={{ fontSize: '20px', color: '#333', marginBottom: '10px' }}>Search Books</h2>
+        <p style={{ color: '#666' }}>Book search functionality to be implemented.</p>
+      </div>
     </div>
   );
 };
