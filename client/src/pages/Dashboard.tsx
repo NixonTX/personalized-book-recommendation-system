@@ -1,9 +1,7 @@
-// L2/client/src/pages/Dashboard.tsx
 import React, { useContext, useEffect, useState, useCallback } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
-import jwtDecode from 'jwt-decode';
 import { useNavigate } from 'react-router-dom';
 
 interface Session {
@@ -23,19 +21,13 @@ const Dashboard: React.FC = () => {
     throw new Error('AuthContext must be used within AuthProvider');
   }
 
-  const { user, accessToken, logout } = authContext;
+  const { user, logout } = authContext;
 
   const fetchSessions = useCallback(async () => {
-    if (!accessToken) {
-      toast.error('No access token available');
-      return;
-    }
     if (isLoading) return;
     setIsLoading(true);
     try {
-      const response = await api.get('/auth/sessions', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      const response = await api.get('/auth/sessions');
       setSessions((prev) => {
         const newSessions = response.data.sessions;
         if (JSON.stringify(prev) !== JSON.stringify(newSessions)) {
@@ -57,7 +49,7 @@ const Dashboard: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, logout, navigate]);
+  }, [logout, navigate]);
 
   useEffect(() => {
     fetchSessions();

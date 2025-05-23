@@ -20,6 +20,7 @@ export default function LoginPage() {
         navigate('/dashboard');
       }
     } catch (error) {
+      // Error handled via toast
     } finally {
       setLoading(false);
     }
@@ -33,7 +34,7 @@ export default function LoginPage() {
       
       <form className="space-y-6" onSubmit={handleSubmit}>
         <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
             Email
           </label>
           <input

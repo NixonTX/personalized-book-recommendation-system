@@ -1,9 +1,6 @@
-// L2/client/src/context/AuthContext.tsx
-import React, { createContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
-import jwtDecode from 'jwt-decode';
-import axios from 'axios';
 
 interface User {
   id: number;
@@ -12,62 +9,79 @@ interface User {
 }
 
 interface AuthContextType {
-  accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
-  user: { username: string } | null;
+  user: User | null;
   login: (email: string, password: string) => Promise<{ success: boolean, error?: string }>;
   register: (username: string, email: string, password: string) => Promise<{ success: boolean, error?: string }>;
   logout: () => Promise<{ success: boolean, error?: string }>;
-  refresh: () => Promise<{ success: boolean, error?: string }>;
+  checkAuthStatus: (bypassDebounce?: boolean) => Promise<{ success: boolean, error?: string, isLoggedOut?: boolean }>;
   revokeSession: (sessionId?: string) => Promise<{ success: boolean, error?: string, isCurrentSession?: boolean }>;
-}
-
-interface JwtPayload {
-  sub: string;
-  jti: string;
-  iat?: number;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [refreshToken, setRefreshToken] = useState<string | null>(null);
-  const [user, setUser] = useState<{ username: string } | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const lastCheckRef = useRef<number>(0);
+
+  const checkAuthStatus = useCallback(async (bypassDebounce = false) => {
+    console.trace('checkAuthStatus called', { bypassDebounce });
+    const now = Date.now();
+    if (!bypassDebounce && now - lastCheckRef.current < 2000) {
+      console.log('Skipping auth status check: too frequent');
+      return { success: false, error: 'Rate limited', isLoggedOut: false };
+    }
+    lastCheckRef.current = now;
+
+    try {
+      const response = await api.get('/auth/status');
+      console.log('checkAuthStatus response:', response.data);
+      const { id, username, email, is_active } = response.data;
+      if (!is_active) {
+        setUser(null);
+        setIsAuthenticated(false);
+        return { success: false, error: 'Account not activated', isLoggedOut: false };
+      }
+      setUser({ id, username, email });
+      setIsAuthenticated(true);
+      return { success: true, isLoggedOut: false };
+    } catch (error: any) {
+      console.error('Auth status check failed:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      const isLoggedOut = error.response?.status === 401;
+      if (isLoggedOut) {
+        setUser(null);
+        setIsAuthenticated(false);
+        document.cookie = 'accessToken=; Max-Age=0; path=/;';
+        document.cookie = 'refreshToken=; Max-Age=0; path=/;';
+      }
+      const errorMessage = isLoggedOut ? 'Session expired' : 'Failed to check auth status';
+      return { success: false, error: errorMessage, isLoggedOut };
+    }
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     try {
-      setAccessToken(null);
-      setRefreshToken(null);
       setUser(null);
       setIsAuthenticated(false);
-
-      const response = await api.post('/auth/login', { email, password });
-      const { access_token, refresh_token, username } = response.data;
-      const accessPayload: JwtPayload = jwtDecode(access_token);
-      const refreshPayload: JwtPayload = jwtDecode(refresh_token);
-      if (accessPayload.jti !== refreshPayload.jti) {
-        console.error('JTI mismatch:', { accessJti: accessPayload.jti, refreshJti: refreshPayload.jti });
-        throw new Error('Token JTI mismatch');
+      document.cookie = 'accessToken=; Max-Age=0; path=/;';
+      document.cookie = 'refreshToken=; Max-Age=0; path=/;';
+      await api.post('/auth/login', { email, password });
+      const result = await checkAuthStatus(true); // Bypass debounce
+      console.log('Login checkAuthStatus result:', result);
+      if (result.success) {
+        toast.success('Logged in successfully!');
+        return { success: true };
+      } else {
+        throw new Error(result.error || 'Login failed');
       }
-      setAccessToken(access_token);
-      setRefreshToken(refresh_token);
-      setUser({ username });
-      setIsAuthenticated(true);
-      console.log('Login stored tokens:', {
-        accessToken: access_token.substring(0, 10),
-        accessJti: accessPayload.jti,
-        refreshToken: refresh_token.substring(0, 10),
-        refreshJti: refreshPayload.jti,
-        username
-      });
-      toast.success('Logged in successfully!');
-      return { success: true };
     } catch (error: any) {
-      console.error('Login Failed:', error.response?.data || error.message);
-      const errorMessage = error.response?.data?.detail || 'Login failed';
+      console.error('Login Failed:', error.message || error.response?.data);
+      const errorMessage = error.response?.data?.detail || error.message || 'Login failed';
       if (errorMessage.includes('not activated')) {
         toast.error('Please verify your email to activate your account.');
       } else {
@@ -75,7 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return { success: false, error: errorMessage };
     }
-  }, []);
+  }, [checkAuthStatus]);
 
   const register = useCallback(async (username: string, email: string, password: string) => {
     try {
@@ -91,149 +105,86 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logout = useCallback(async () => {
-    const accessPayload: JwtPayload = accessToken ? jwtDecode(accessToken) : { jti: 'none', sub: '' };
-    console.log('Logout with accessToken:', accessToken?.substring(0, 10), 'jti:', accessPayload.jti);
-    let retries = 1;
-    while (retries >= 0) {
-      try {
-        if (accessToken) {
-          await api.post('/auth/logout', {}, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          console.log('Logout API call succeeded, jti:', accessPayload.jti);
-        }
-        break;
-      } catch (error: any) {
-        console.error('Logout error:', {
-          status: error.response?.status,
-          data: error.response?.data,
-          retries,
-        });
-        const status = error.response?.status;
-        if (status === 401) {
-          toast.error('Session expired. Logged out.');
-          break;
-        } else if (status === 500) {
-          toast.error('Server error during logout. Clearing session.');
-        }
-        retries--;
-        if (retries < 0) {
-          console.warn('Logout API failed, clearing state anyway');
-          toast.error('Logout failed, session cleared.');
-        }
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-    setAccessToken(null);
-    setRefreshToken(null);
-    setUser(null);
-    setIsAuthenticated(false);
-    console.log('Logged out, cleared tokens');
-    toast.success('Logged out successfully!');
-    return { success: true };
-  }, [accessToken]);
-
-  const refresh = useCallback(async () => {
-    if (!refreshToken || !isAuthenticated) {
-      console.error('No refresh token or not authenticated');
-      setAccessToken(null);
-      setRefreshToken(null);
+    try {
+      await api.post('/auth/logout');
       setUser(null);
       setIsAuthenticated(false);
-      return { success: false, error: 'No refresh token' };
-    }
-
-    try {
-      const refreshPayload: JwtPayload = jwtDecode(refreshToken);
-      console.log('Refreshing with token:', refreshToken.substring(0, 10), 'jti:', refreshPayload.jti);
-      const response = await api.post('/auth/refresh', { refresh_token: refreshToken });
-      const { access_token, refresh_token, username } = response.data;
-      const accessPayload: JwtPayload = jwtDecode(access_token);
-      const newRefreshPayload: JwtPayload = jwtDecode(refresh_token);
-      if (accessPayload.jti !== newRefreshPayload.jti) {
-        console.error('Refresh JTI mismatch:', { accessJti: accessPayload.jti, refreshJti: newRefreshPayload.jti });
-        throw new Error('Refresh token JTI mismatch');
-      }
-      setAccessToken(access_token);
-      setRefreshToken(refresh_token);
-      setUser({ username });
-      setIsAuthenticated(true);
-      console.log('Refresh stored tokens:', {
-        accessToken: access_token.substring(0, 10),
-        accessJti: accessPayload.jti,
-        refreshToken: refresh_token.substring(0, 10),
-        refreshJti: newRefreshPayload.jti,
-        username
-      });
+      document.cookie = 'accessToken=; Max-Age=0; path=/;';
+      document.cookie = 'refreshToken=; Max-Age=0; path=/;';
+      toast.success('Logged out successfully!');
       return { success: true };
     } catch (error: any) {
-      console.error('Refresh Failed:', {
-        status: error.response?.status,
-        data: error.response?.data,
-      });
+      console.error('Logout error:', error.response?.data);
       const status = error.response?.status;
-      const message = status === 401 ? 'Session expired. Please log in again.' :
-                      status === 500 ? 'Server error. Please try again later.' :
-                      'Failed to refresh session.';
-      toast.error(message);
-      setAccessToken(null);
-      setRefreshToken(null);
+      const message = status === 401 ? 'Session already invalid or logged out' :
+                      status === 500 ? 'Server error during logout' :
+                      'Logout failed';
+      toast.info(message);
       setUser(null);
       setIsAuthenticated(false);
-      return { success: false, error: message };
+      document.cookie = 'accessToken=; Max-Age=0; path=/;';
+      document.cookie = 'refreshToken=; Max-Age=0; path=/;';
+      return { success: true };
     }
-  }, [refreshToken, isAuthenticated]);
+  }, []);
 
   const revokeSession = useCallback(async (sessionId?: string) => {
     try {
-      const response = await api.post(
-        '/auth/sessions/revoke',
-        { session_id: sessionId },
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
+      const response = await api.post('/auth/sessions/revoke', { session_id: sessionId });
       const { count } = response.data;
       toast.success(sessionId ? 'Session revoked' : `Revoked ${count} other session${count === 1 ? '' : 's'}`);
-
-      const isCurrentSession = !!sessionId && sessionId === (accessToken ? jwtDecode<JwtPayload>(accessToken).jti : null);
-      
-      if (isCurrentSession) {
-        setAccessToken(null);
-        setRefreshToken(null);
-        setUser(null);
-        setIsAuthenticated(false);
+      if (sessionId) {
+        const statusResult = await checkAuthStatus();
+        const isCurrentSession = !statusResult.success;
+        if (isCurrentSession) {
+          setUser(null);
+          setIsAuthenticated(false);
+          document.cookie = 'accessToken=; Max-Age=0; path=/;';
+          document.cookie = 'refreshToken=; Max-Age=0; path=/;';
+        }
+        return { success: true, isCurrentSession };
       }
-      return { success: true, isCurrentSession };
+      return { success: true };
     } catch (error: any) {
       console.error('Revoke Failed:', error.response?.data);
       const status = error.response?.status;
-      const message = status === 401 ? 'Session expired. Logging out.' :
+      const message = status === 401 ? 'Session expired or invalid. Please log in again.' :
                       status === 500 ? 'Server error. Please try again later.' :
                       'Failed to revoke session.';
-      toast.error(message);
-      if (status === 401) {
-        setAccessToken(null);
-        setRefreshToken(null);
-        setUser(null);
-        setIsAuthenticated(false);
-        return { success: false, error: message, isCurrentSession: true };
+      toast.info(message);
+      if (status === 401 && sessionId) {
+        const statusResult = await checkAuthStatus();
+        if (!statusResult.success) {
+          setUser(null);
+          setIsAuthenticated(false);
+          document.cookie = 'accessToken=; Max-Age=0; path=/;';
+          document.cookie = 'refreshToken=; Max-Age=0; path=/;';
+          return { success: false, error: message, isCurrentSession: true };
+        }
       }
       return { success: false, error: message };
     }
-  }, [accessToken]);
+  }, [checkAuthStatus]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('Skipping initial checkAuthStatus: already authenticated');
+      return;
+    }
+    checkAuthStatus();
+  }, [checkAuthStatus, isAuthenticated]);
 
   const value = useMemo(
     () => ({
-      accessToken,
-      refreshToken,
       isAuthenticated,
       user,
       login,
       register,
       logout,
-      refresh,
+      checkAuthStatus,
       revokeSession,
     }),
-    [accessToken, refreshToken, isAuthenticated, user, login, register, logout, refresh, revokeSession]
+    [isAuthenticated, user, login, register, logout, checkAuthStatus, revokeSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

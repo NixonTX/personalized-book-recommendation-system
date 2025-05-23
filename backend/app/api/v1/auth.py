@@ -1,6 +1,5 @@
-# backend/app/api/v1/auth.py
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy import delete, select
@@ -41,17 +40,16 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 @router.post("/register", response_model=UserResponse)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     user = await create_user(db, user_data)
-    # Generate and send verification email
     token = await create_verification_token(db, user.id)
     try:
         await send_verification_email(user.email, user.username, token)
     except Exception as e:
-        # Log error but don't fail registration
         print(f"Failed to send verification email: {e}")
     return user
 
 @router.post("/login", response_model=Token)
 async def login(
+    response: Response,
     form_data: UserAuth,
     request: Request = None,
     db: AsyncSession = Depends(get_db),
@@ -68,7 +66,6 @@ async def login(
     session_id = await create_session(
         db, user.id, request.client.host, request.headers.get("User-Agent", "")
     )
-    # Verify session
     result = await db.execute(select(Session).where(Session.id == session_id))
     session = result.scalars().first()
     if not session:
@@ -83,10 +80,26 @@ async def login(
         expires_delta=timedelta(days=7),
     )
 
-    # Log token JTIs
     access_payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     refresh_payload = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     logger.info(f"Generated tokens - access_jti: {access_payload['jti']}, refresh_jti: {refresh_payload['jti']}")
+
+    response.set_cookie(
+        key="accessToken",
+        value=access_token,
+        httponly=True,
+        secure=False,  # Set to False for local testing
+        samesite="strict",
+        max_age=int(access_token_expires.total_seconds())
+    )
+    response.set_cookie(
+        key="refreshToken",
+        value=refresh_token,
+        httponly=True,
+        secure=False,  # Set to False for local testing
+        samesite="strict",
+        max_age=7 * 24 * 3600
+    )
 
     user.last_login = datetime.now(timezone.utc)
     await db.commit()
@@ -101,43 +114,41 @@ async def login(
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout(
-    token: str = Depends(oauth2_scheme),
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Log out the current user by deleting their session.
-    """
     try:
-        # Decode token to get jti
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        session_id = payload.get("jti")
+        session_id = current_user.session_id
         user_id = current_user.id
 
-        # Verify session exists
         result = await db.execute(
             select(Session).where(Session.id == session_id, Session.user_id == user_id)
         )
         session = result.scalars().first()
         if not session:
             logger.warning(f"Session {session_id} not found for user {current_user.email}")
+            response.delete_cookie("accessToken", httponly=True, secure=False, samesite="strict")
+            response.delete_cookie("refreshToken", httponly=True, secure=False, samesite="strict")
+            logger.info(f"Cleared cookies for user {current_user.email} due to missing session")
             return {"message": "Session already invalid or logged out"}
 
-        # Blacklist and delete session
         await blacklist_token(session_id, expiry=7*24*3600)
         logger.info(f"Blacklisted session {session_id} for user {current_user.email}")
         await db.delete(session)
         await db.commit()
         logger.info(f"Logged out user {current_user.email}, session: {session_id}")
 
+        response.delete_cookie("accessToken", httponly=True, secure=False, samesite="strict")
+        response.delete_cookie("refreshToken", httponly=True, secure=False, samesite="strict")
+        logger.info(f"Cleared cookies for user {current_user.email} after logout")
         return {"message": "Logged out successfully"}
-
-    except JWTError as e:
-        logger.error(f"JWT decode error for user {current_user.email}: {str(e)}")
-        return {"message": "Session already invalid or logged out"}
     except Exception as e:
         logger.error(f"Logout error for user {current_user.email}: {str(e)}")
         await db.rollback()
+        response.delete_cookie("accessToken", httponly=True, secure=False, samesite="strict")
+        response.delete_cookie("refreshToken", httponly=True, secure=False, samesite="strict")
+        logger.info(f"Cleared cookies for user {current_user.email} due to error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Logout failed"
@@ -145,6 +156,7 @@ async def logout(
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(
+    response: Response,
     request: RefreshTokenRequest,
     req: Request,
     db: AsyncSession = Depends(get_db),
@@ -172,19 +184,17 @@ async def refresh_token(
         logger.error(f"JWT decode error: {e}")
         raise credentials_exception
 
-    # Fetch session
     result = await db.execute(select(Session).where(Session.id == session_id))
     session = result.scalars().first()
     if not session:
         logger.error(f"Session not found: {session_id}")
         raise credentials_exception
     if session.expires_at < datetime.now(timezone.utc):
-        logger.error(f"Session expired: {session_id}, expires_at: {session.expires_at}")
+        logger.error(f"Session expired: {session_id}, Expires_at: {session.expires_at}")
         await db.delete(session)
         await db.commit()
         raise credentials_exception
 
-    # Log IP and user-agent for debugging, but don't fail
     current_ip = req.client.host
     current_user_agent = req.headers.get("User-Agent", "")
     if session.ip_address != current_ip:
@@ -192,7 +202,6 @@ async def refresh_token(
     if session.user_agent != current_user_agent:
         logger.info(f"User-agent changed for session {session_id}: stored {session.user_agent}, current {current_user_agent}")
 
-    # Fetch user
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalars().first()
     if user is None or not user.is_active:
@@ -201,7 +210,6 @@ async def refresh_token(
         await db.commit()
         raise credentials_exception
 
-    # Create new session
     new_session_id = await create_session(db, user.id, current_ip, current_user_agent)
     access_token = await create_access_token(
         data={"sub": user.email, "jti": new_session_id},
@@ -212,7 +220,6 @@ async def refresh_token(
         expires_delta=timedelta(days=7),
     )
 
-    # Delete old session (no blacklisting to avoid conflicts)
     try:
         await db.delete(session)
         await db.commit()
@@ -221,6 +228,23 @@ async def refresh_token(
         logger.error(f"Error deleting old session {session_id}: {e}")
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Session update failed")
+
+    response.set_cookie(
+        key="accessToken",
+        value=access_token,
+        httponly=True,
+        secure=False,  # Set to False for local testing
+        samesite="strict",
+        max_age=int(timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES).total_seconds())
+    )
+    response.set_cookie(
+        key="refreshToken",
+        value=new_refresh_token,
+        httponly=True,
+        secure=False,  # Set to False for local testing
+        samesite="strict",
+        max_age=7 * 24 * 3600
+    )
 
     return {
         "access_token": access_token,
@@ -232,14 +256,12 @@ async def refresh_token(
 @router.post("/sessions/revoke")
 async def revoke_session(
     request: RevokeSessionRequest,
-    token: str = Depends(oauth2_scheme),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     logger.info(f"Revoke request for user {user.email}, session_id: {request.session_id}")
     try:
         if request.session_id:
-            # Revoke specific session
             result = await db.execute(
                 select(Session).where(Session.id == request.session_id, Session.user_id == user.id)
             )
@@ -257,10 +279,7 @@ async def revoke_session(
             logger.info(f"Revoked session {request.session_id} for user {user.email}")
             return {"detail": "Session revoked", "count": 1}
         else:
-            # Revoke all sessions except current
-            current_session_id = jwt.decode(
-                token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-            )["jti"]
+            current_session_id = user.session_id
             result = await db.execute(
                 select(Session).where(Session.user_id == user.id, Session.id != current_session_id)
             )
@@ -273,12 +292,6 @@ async def revoke_session(
             await db.commit()
             logger.info(f"Revoked {count} sessions for user {user.email}, kept {current_session_id}")
             return {"detail": "Sessions revoked", "count": count}
-    except JWTError as e:
-        logger.error(f"JWT decode error for user {user.email}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
     except Exception as e:
         logger.error(f"Revoke error for user {user.email}: {str(e)}")
         await db.rollback()
@@ -338,4 +351,13 @@ async def debug_session(session_id: str, db: AsyncSession = Depends(get_db)):
         "ip_address": session.ip_address,
         "created_at": session.created_at,
         "expires_at": session.expires_at
+    }
+
+@router.get("/status")
+async def auth_status(current_user: User = Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "is_active": current_user.is_active
     }

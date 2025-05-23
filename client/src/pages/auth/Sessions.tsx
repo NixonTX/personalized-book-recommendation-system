@@ -1,10 +1,8 @@
-// L2/client/src/pages/Sessions.tsx
 import React, { useContext, useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "/home/nixontx/Desktop/ML/L2/client/src/context/AuthContext.tsx";
 import { toast } from "react-toastify";
 import api from "/home/nixontx/Desktop/ML/L2/client/src/utils/api.ts";
-import jwtDecode from "jwt-decode";
 
 interface Session {
   id: string;
@@ -23,27 +21,20 @@ const Sessions: React.FC = () => {
     throw new Error("AuthContext must be used within AuthProvider");
   }
 
-  const { accessToken, revokeSession } = authContext;
+  const { revokeSession } = authContext;
 
   const fetchSessions = useCallback(async () => {
-    if (!accessToken) {
-      toast.error("No access token available");
-      navigate("/auth/login");
-      return;
-    }
     if (isLoading) return;
     setIsLoading(true);
     try {
-      const response = await api.get("/auth/sessions", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      const response = await api.get('/auth/sessions');
       setSessions((prev) => {
         const newSessions = response.data.sessions;
         if (JSON.stringify(prev) !== JSON.stringify(newSessions)) {
           return newSessions;
         }
         return prev;
-      });
+      })
     } catch (error: any) {
       console.error("Failed to fetch sessions:", error.response?.data);
       const status = error.response?.status;
@@ -60,7 +51,7 @@ const Sessions: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, navigate]);
+  }, [navigate]);
 
   useEffect(() => {
     fetchSessions();
@@ -87,10 +78,7 @@ const Sessions: React.FC = () => {
     if (isLoading) return;
     try {
       await revokeSession();
-      const currentJti = accessToken
-        ? jwtDecode<{ jti: string }>(accessToken).jti
-        : "";
-      setSessions((prev) => prev.filter((s) => s.id === currentJti));
+      setSessions([]);
     } catch (error) {
       // Error handled in revokeSession
     }
