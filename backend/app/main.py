@@ -112,7 +112,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS", "DELETE", "PUT", "PATCH"],
     allow_headers=['*'],
+    expose_headers=["Content-Security-Policy"],
 )
+
+@app.middleware("http")
+async def add_csp_header(request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; object-src 'none';"
+    return response
 
 print("🐛 DEBUG: FastAPI app created")
 

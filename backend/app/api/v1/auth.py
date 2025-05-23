@@ -100,6 +100,15 @@ async def login(
         samesite="strict",
         max_age=7 * 24 * 3600
     )
+    response.set_cookie(
+        key="auth_state",
+        value="isAuthenticated=true",
+        httponly=False,  # Allow frontend access
+        secure=False,  # Set to False for local testing
+        samesite="strict",
+        max_age=int(access_token_expires.total_seconds())
+    )
+    logger.info(f"Set auth_state cookie for user {user.email}")
 
     user.last_login = datetime.now(timezone.utc)
     await db.commit()
@@ -130,6 +139,7 @@ async def logout(
             logger.warning(f"Session {session_id} not found for user {current_user.email}")
             response.delete_cookie("accessToken", httponly=True, secure=False, samesite="strict")
             response.delete_cookie("refreshToken", httponly=True, secure=False, samesite="strict")
+            response.delete_cookie("auth_state", httponly=False, secure=False, samesite="strict")
             logger.info(f"Cleared cookies for user {current_user.email} due to missing session")
             return {"message": "Session already invalid or logged out"}
 
@@ -141,14 +151,16 @@ async def logout(
 
         response.delete_cookie("accessToken", httponly=True, secure=False, samesite="strict")
         response.delete_cookie("refreshToken", httponly=True, secure=False, samesite="strict")
-        logger.info(f"Cleared cookies for user {current_user.email} after logout")
+        response.delete_cookie("auth_state", httponly=False, secure=False, samesite="strict")
+        logger.info(f"Cleared cookies including auth_state for user {current_user.email} after logout")
         return {"message": "Logged out successfully"}
     except Exception as e:
         logger.error(f"Logout error for user {current_user.email}: {str(e)}")
         await db.rollback()
         response.delete_cookie("accessToken", httponly=True, secure=False, samesite="strict")
         response.delete_cookie("refreshToken", httponly=True, secure=False, samesite="strict")
-        logger.info(f"Cleared cookies for user {current_user.email} due to error")
+        response.delete_cookie("auth_state", httponly=False, secure=False, samesite="strict")
+        logger.info(f"Cleared cookies including auth_state for user {current_user.email} due to error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Logout failed"

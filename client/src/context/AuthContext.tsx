@@ -1,6 +1,7 @@
 import React, { createContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
+import { getCookie } from '../utils/cookies';
 
 interface User {
   id: number;
@@ -21,17 +22,17 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem('auth_user');
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('auth_isAuthenticated') === 'true';
+    const authState = getCookie('auth_state');
+    console.log('Initial auth_state cookie:', authState);
+    return authState?.includes('isAuthenticated=true') || false;
   });
+  const [loading, setLoading] = useState<boolean>(true);
   const lastCheckRef = useRef<number>(0);
 
-  const checkAuthStatus = useCallback(async (bypassDebounce = false, retryCount = 0): Promise<{ success: boolean, error?: string, isLoggedOut?: boolean }> => {
-    console.trace('checkAuthStatus called', { bypassDebounce, retryCount });
+  const checkAuthStatus = useCallback(async (bypassDebounce = false): Promise<{ success: boolean, error?: string, isLoggedOut?: boolean }> => {
+    console.trace('checkAuthStatus called', { bypassDebounce });
     const now = Date.now();
     if (!bypassDebounce && now - lastCheckRef.current < 2000) {
       console.log('Skipping auth status check: too frequent');
@@ -46,14 +47,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!is_active) {
         setUser(null);
         setIsAuthenticated(false);
-        localStorage.removeItem('auth_user');
-        localStorage.removeItem('auth_isAuthenticated');
+        document.cookie = 'auth_state=; Max-Age=0; path=/; samesite=strict';
         return { success: false, error: 'Account not activated', isLoggedOut: false };
       }
       setUser({ id, username, email });
       setIsAuthenticated(true);
-      localStorage.setItem('auth_user', JSON.stringify({ id, username, email }));
-      localStorage.setItem('auth_isAuthenticated', 'true');
       return { success: true, isLoggedOut: false };
     } catch (error: any) {
       console.error('Auth status check failed:', {
@@ -62,32 +60,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         data: error.response?.data,
       });
       const isLoggedOut = error.response?.status === 401;
-      if (!isLoggedOut && !error.response && retryCount < 2) {
-        console.log(`Retrying auth status check (${retryCount + 1}/2)`);
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s
-        return checkAuthStatus(bypassDebounce, retryCount + 1);
-      }
       if (isLoggedOut) {
         setUser(null);
         setIsAuthenticated(false);
-        localStorage.removeItem('auth_user');
-        localStorage.removeItem('auth_isAuthenticated');
         document.cookie = 'accessToken=; Max-Age=0; path=/;';
         document.cookie = 'refreshToken=; Max-Age=0; path=/;';
+        document.cookie = 'auth_state=; Max-Age=0; path=/; samesite=strict';
       }
       const errorMessage = isLoggedOut ? 'Session expired' : 'Failed to check auth status';
       return { success: false, error: errorMessage, isLoggedOut };
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     try {
+      setLoading(true);
       setUser(null);
       setIsAuthenticated(false);
-      localStorage.removeItem('auth_user');
-      localStorage.removeItem('auth_isAuthenticated');
       document.cookie = 'accessToken=; Max-Age=0; path=/;';
       document.cookie = 'refreshToken=; Max-Age=0; path=/;';
+      document.cookie = 'auth_state=; Max-Age=0; path=/; samesite=strict';
       await api.post('/auth/login', { email, password });
       const result = await checkAuthStatus(true); // Bypass debounce
       console.log('Login checkAuthStatus result:', result);
@@ -106,11 +100,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toast.error(errorMessage);
       }
       return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
     }
   }, [checkAuthStatus]);
 
   const register = useCallback(async (username: string, email: string, password: string) => {
     try {
+      setLoading(true);
       await api.post('/auth/register', { username, email, password });
       toast.success('Registration successful! Please check your email to verify your account.');
       return { success: true };
@@ -119,18 +116,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const errorMessage = error.response?.data?.detail || 'Registration failed';
       toast.error(errorMessage);
       return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   const logout = useCallback(async () => {
     try {
+      setLoading(true);
       await api.post('/auth/logout');
       setUser(null);
       setIsAuthenticated(false);
-      localStorage.removeItem('auth_user');
-      localStorage.removeItem('auth_isAuthenticated');
       document.cookie = 'accessToken=; Max-Age=0; path=/;';
       document.cookie = 'refreshToken=; Max-Age=0; path=/;';
+      document.cookie = 'auth_state=; Max-Age=0; path=/; samesite=strict';
       toast.success('Logged out successfully!');
       return { success: true };
     } catch (error: any) {
@@ -142,16 +141,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       toast.info(message);
       setUser(null);
       setIsAuthenticated(false);
-      localStorage.removeItem('auth_user');
-      localStorage.removeItem('auth_isAuthenticated');
       document.cookie = 'accessToken=; Max-Age=0; path=/;';
       document.cookie = 'refreshToken=; Max-Age=0; path=/;';
+      document.cookie = 'auth_state=; Max-Age=0; path=/; samesite=strict';
       return { success: true };
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   const revokeSession = useCallback(async (sessionId?: string) => {
     try {
+      setLoading(true);
       const response = await api.post('/auth/sessions/revoke', { session_id: sessionId });
       const { count } = response.data;
       toast.success(sessionId ? 'Session revoked' : `Revoked ${count} other session${count === 1 ? '' : 's'}`);
@@ -161,10 +162,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (isCurrentSession) {
           setUser(null);
           setIsAuthenticated(false);
-          localStorage.removeItem('auth_user');
-          localStorage.removeItem('auth_isAuthenticated');
           document.cookie = 'accessToken=; Max-Age=0; path=/;';
           document.cookie = 'refreshToken=; Max-Age=0; path=/;';
+          document.cookie = 'auth_state=; Max-Age=0; path=/; samesite=strict';
         }
         return { success: true, isCurrentSession };
       }
@@ -181,24 +181,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!statusResult.success) {
           setUser(null);
           setIsAuthenticated(false);
-          localStorage.removeItem('auth_user');
-          localStorage.removeItem('auth_isAuthenticated');
           document.cookie = 'accessToken=; Max-Age=0; path=/;';
           document.cookie = 'refreshToken=; Max-Age=0; path=/;';
+          document.cookie = 'auth_state=; Max-Age=0; path=/; samesite=strict';
           return { success: false, error: message, isCurrentSession: true };
         }
       }
       return { success: false, error: message };
+    } finally {
+      setLoading(false);
     }
   }, [checkAuthStatus]);
 
   useEffect(() => {
-    console.log('Restoring auth state from localStorage:', {
-      isAuthenticated,
-      user,
-    });
+    console.log('Checking initial auth state:', { isAuthenticated, loading });
     if (isAuthenticated) {
       console.log('Skipping initial checkAuthStatus: already authenticated');
+      setLoading(false);
       return;
     }
     const timer = setTimeout(() => {
@@ -219,6 +218,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }),
     [isAuthenticated, user, login, register, logout, checkAuthStatus, revokeSession]
   );
+
+  if (loading) {
+    console.log('AuthProvider: Loading, deferring render');
+    return null;
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
