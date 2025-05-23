@@ -21,12 +21,17 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<User | null>(() => {
+    const stored = localStorage.getItem('auth_user');
+    return stored ? JSON.parse(stored) : null;
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('auth_isAuthenticated') === 'true';
+  });
   const lastCheckRef = useRef<number>(0);
 
-  const checkAuthStatus = useCallback(async (bypassDebounce = false) => {
-    console.trace('checkAuthStatus called', { bypassDebounce });
+  const checkAuthStatus = useCallback(async (bypassDebounce = false, retryCount = 0): Promise<{ success: boolean, error?: string, isLoggedOut?: boolean }> => {
+    console.trace('checkAuthStatus called', { bypassDebounce, retryCount });
     const now = Date.now();
     if (!bypassDebounce && now - lastCheckRef.current < 2000) {
       console.log('Skipping auth status check: too frequent');
@@ -41,10 +46,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!is_active) {
         setUser(null);
         setIsAuthenticated(false);
+        localStorage.removeItem('auth_user');
+        localStorage.removeItem('auth_isAuthenticated');
         return { success: false, error: 'Account not activated', isLoggedOut: false };
       }
       setUser({ id, username, email });
       setIsAuthenticated(true);
+      localStorage.setItem('auth_user', JSON.stringify({ id, username, email }));
+      localStorage.setItem('auth_isAuthenticated', 'true');
       return { success: true, isLoggedOut: false };
     } catch (error: any) {
       console.error('Auth status check failed:', {
@@ -53,9 +62,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         data: error.response?.data,
       });
       const isLoggedOut = error.response?.status === 401;
+      if (!isLoggedOut && !error.response && retryCount < 2) {
+        console.log(`Retrying auth status check (${retryCount + 1}/2)`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s
+        return checkAuthStatus(bypassDebounce, retryCount + 1);
+      }
       if (isLoggedOut) {
         setUser(null);
         setIsAuthenticated(false);
+        localStorage.removeItem('auth_user');
+        localStorage.removeItem('auth_isAuthenticated');
         document.cookie = 'accessToken=; Max-Age=0; path=/;';
         document.cookie = 'refreshToken=; Max-Age=0; path=/;';
       }
@@ -68,6 +84,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setUser(null);
       setIsAuthenticated(false);
+      localStorage.removeItem('auth_user');
+      localStorage.removeItem('auth_isAuthenticated');
       document.cookie = 'accessToken=; Max-Age=0; path=/;';
       document.cookie = 'refreshToken=; Max-Age=0; path=/;';
       await api.post('/auth/login', { email, password });
@@ -109,6 +127,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await api.post('/auth/logout');
       setUser(null);
       setIsAuthenticated(false);
+      localStorage.removeItem('auth_user');
+      localStorage.removeItem('auth_isAuthenticated');
       document.cookie = 'accessToken=; Max-Age=0; path=/;';
       document.cookie = 'refreshToken=; Max-Age=0; path=/;';
       toast.success('Logged out successfully!');
@@ -122,6 +142,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       toast.info(message);
       setUser(null);
       setIsAuthenticated(false);
+      localStorage.removeItem('auth_user');
+      localStorage.removeItem('auth_isAuthenticated');
       document.cookie = 'accessToken=; Max-Age=0; path=/;';
       document.cookie = 'refreshToken=; Max-Age=0; path=/;';
       return { success: true };
@@ -139,6 +161,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (isCurrentSession) {
           setUser(null);
           setIsAuthenticated(false);
+          localStorage.removeItem('auth_user');
+          localStorage.removeItem('auth_isAuthenticated');
           document.cookie = 'accessToken=; Max-Age=0; path=/;';
           document.cookie = 'refreshToken=; Max-Age=0; path=/;';
         }
@@ -157,6 +181,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!statusResult.success) {
           setUser(null);
           setIsAuthenticated(false);
+          localStorage.removeItem('auth_user');
+          localStorage.removeItem('auth_isAuthenticated');
           document.cookie = 'accessToken=; Max-Age=0; path=/;';
           document.cookie = 'refreshToken=; Max-Age=0; path=/;';
           return { success: false, error: message, isCurrentSession: true };
@@ -167,11 +193,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [checkAuthStatus]);
 
   useEffect(() => {
+    console.log('Restoring auth state from localStorage:', {
+      isAuthenticated,
+      user,
+    });
     if (isAuthenticated) {
       console.log('Skipping initial checkAuthStatus: already authenticated');
       return;
     }
-    checkAuthStatus();
+    const timer = setTimeout(() => {
+      checkAuthStatus();
+    }, 1000); // Delay by 1 second
+    return () => clearTimeout(timer);
   }, [checkAuthStatus, isAuthenticated]);
 
   const value = useMemo(
