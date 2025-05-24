@@ -3,6 +3,7 @@ import { AuthContext } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import api from '../utils/api';
 import { useNavigate } from 'react-router-dom';
+import { SearchBar } from '../components/search/SearchBar';
 
 interface Session {
   id: string;
@@ -11,11 +12,25 @@ interface Session {
   created_at: string;
 }
 
+interface Book {
+  isbn: string;
+  title: string;
+  author: string;
+}
+
+interface Suggestion {
+  name: string;
+}
+
 const Dashboard: React.FC = () => {
   const authContext = useContext(AuthContext);
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState<(Book | Suggestion)[]>([]);
+
 
   if (!authContext) {
     throw new Error('AuthContext must be used within AuthProvider');
@@ -50,6 +65,55 @@ const Dashboard: React.FC = () => {
       setIsLoading(false);
     }
   }, [logout, navigate]);
+
+  const handleSearchSubmit = useCallback(async (query: string) => {
+    if (!query) return;
+    setSearchLoading(true);
+    try {
+      const response = await api.post('/search/books', { query });
+      const { books } = response.data;
+      toast.success(`Found ${books.length} book(s) for "${query}"`);
+      // Optionally navigate to a results page or display results
+      // navigate(`/search?query=${encodeURIComponent(query)}`);
+    } catch (error: any) {
+      console.error('Search failed:', error.response?.data);
+      const message = error.response?.status === 400 ? 'Invalid search query' :
+                      error.response?.status === 500 ? 'Server error during search' :
+                      'Failed to search books';
+      toast.error(message);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  const handleSearchChange = useCallback(async (value: string) => {
+    setSearchQuery(value);
+    if (value.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const response = await api.post('/search/books', { query: value });
+      setSuggestions(response.data.suggestions || []);
+    } catch (error: any) {
+      console.error('Failed to fetch suggestions:', error.response?.data);
+      setSuggestions([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  const handleSuggestionSelect = useCallback((suggestion: Book | Suggestion) => {
+    const query = 'isbn' in suggestion ? suggestion.title : suggestion.name;
+    setSearchQuery(query);
+    handleSearchSubmit(query);
+  }, [handleSearchSubmit]);
+
+  const handleSearchClear = useCallback(() => {
+    setSearchQuery('');
+    setSuggestions([]);
+  }, []);
 
   useEffect(() => {
     fetchSessions();
@@ -116,10 +180,22 @@ const Dashboard: React.FC = () => {
           </button>
         </div>
       </div>
-      {/* Placeholder for book search functionality */}
-      <div>
-        <h2 style={{ fontSize: '20px', color: '#333', marginBottom: '10px' }}>Search Books</h2>
-        <p style={{ color: '#666' }}>Book search functionality to be implemented.</p>
+      <div style={{ display: 'flex', justifyContent: 'center', margin: '40px 0' }}>
+        <div style={{ width: '100%', maxWidth: '600px' }}>
+          <h2 style={{ fontSize: '20px', color: '#333', marginBottom: '10px', textAlign: 'center' }}>
+            Search Books
+          </h2>
+          <SearchBar
+            value={searchQuery}
+            onChange={handleSearchChange}
+            onSubmit={handleSearchSubmit}
+            onClear={handleSearchClear}
+            loading={searchLoading}
+            placeholder="Search books or authors"
+            suggestions={suggestions}
+            onSuggestionsSelect={handleSuggestionSelect}
+          />
+        </div>
       </div>
     </div>
   );
