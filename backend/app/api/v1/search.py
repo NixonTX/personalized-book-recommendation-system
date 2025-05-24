@@ -1,4 +1,5 @@
 # backend/app/api/v1/search.py
+import json
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from services.books import GOOGLE_BOOKS_API_KEY, get_book_details
@@ -85,23 +86,47 @@ async def search_books(
             }
             
             return response
-
-@router.get("/search/suggestions", response_model=SuggestionResponse)
-async def get_suggestions(
-    q: str = Query(..., min_length=2, max_length=50),
-    db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
-):
-    try:
-        return await get_search_suggestions(db, q)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get suggestions: {str(e)}"
-        )
+        
+@router.get("/search/suggestions")
+async def search_suggestions(q: str, db: AsyncSession = Depends(get_db)):
+    if not q or len(q) < 2:
+        return {"suggestions": []}
     
+    # Check Redis cache
+    cached_suggestions = await redis_client.get(f"suggestions:{q}")
+    if cached_suggestions:
+        return {"suggestions": json.loads(cached_suggestions)}
+    
+    # Query Google Books API
+    async with aiohttp.ClientSession() as session:
+        url = f"https://www.googleapis.com/books/v1/volumes?q={q}&key={GOOGLE_BOOKS_API_KEY}&maxResults=5"
+        async with session.get(url) as response:
+            logger.info(f"Google Books API suggestions for query '{q}': {response.status}")
+            if response.status != 200:
+                logger.error(f"API error: {response.status} - {await response.text()}")
+                return {"suggestions": []}
+            
+            data = await response.json()
+            items = data.get("items", [])
+            suggestions = []
+            for item in items:
+                volume_info = item.get("volumeInfo", {})
+                isbn_list = volume_info.get("industryIdentifiers", [])
+                isbn = next((i["identifier"] for i in isbn_list if i["type"] == "ISBN_13"), None)
+                title = volume_info.get("title", "")
+                authors = volume_info.get("authors", ["Unknown Author"])
+                author = ", ".join(authors)
+                if isbn and title:
+                    suggestions.append({
+                        "isbn": isbn,
+                        "title": title,
+                        "author": author
+                    })
+            
+            # Cache for 1 hour
+            await redis_client.setex(f"suggestions:{q}", 3600, json.dumps(suggestions))
+            return {"suggestions": suggestions}
+        
 # Search history
 @router.get("/search/history", response_model=SearchHistoryResponse)
 async def get_search_history(
