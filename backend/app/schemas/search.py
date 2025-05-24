@@ -41,8 +41,14 @@ class SearchResult(BaseModel):
     average_rating: Optional[float]
     cover_url: Optional[str]
 
+# For the simplified Frontend version
+class SearchBook(BaseModel):
+    isbn: str
+    title: str
+    author: str
+
 class SearchResponse(BaseModel):
-    results: list[SearchResult]
+    results: list[SearchBook]
     meta: dict
 
 class TitleSuggestion(BaseModel):

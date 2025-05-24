@@ -132,12 +132,18 @@ const Dashboard: React.FC = () => {
       const response = await api.get('/search', {
         params: { q: query, page: 1, per_page: 10 },
       });
+      console.log('Search response:', response.data);
       setSearchResults(response.data);
-      toast.success(`Found ${response.data.meta.total} book(s) for "${query}"`);
+      if (response.data.meta.total === 0) {
+        toast.info(`No books found for "${query}". Try a different spelling or keyword.`);
+      } else {
+        toast.success(`Found ${response.data.meta.total} book(s) for "${query}"`);
+      }
     } catch (error: any) {
       console.error('Search failed:', error.response?.data);
       const status = error.response?.status;
       const message = status === 400 ? 'Invalid search query' :
+                      status === 404 ? 'Search endpoint not found' :
                       status === 500 ? 'Server error during search' :
                       status === 401 ? 'Session expired. Logging out.' :
                       'Failed to search books';
