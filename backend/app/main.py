@@ -1,14 +1,23 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from fastapi import FastAPI
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.app.models import user
+from backend.app.models.user import Session
 # Import routers from api/v1
-from .api.v1 import recommendations
-from backend.app.api.v1 import books
-from backend.app.api.v1 import users
-from backend.app.api.v1 import ratings, bookmarks, reviews, search
+from backend.app.api.v1 import books, users, ratings, bookmarks, reviews, search, auth, recommendations
 from backend.utils import refresh_popular_books
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncpg
 from backend.utils.config import settings
+from backend.app.database.db import init_models, async_session, engine
+from fastapi.middleware.cors import CORSMiddleware
+import logging
+from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
 
 print("🐛 DEBUG: Starting app.py")
 
@@ -19,16 +28,40 @@ except ImportError as e:
     print(f"❌ Import Error: {e}")
     raise
 
+async def cleanup_expired_sessions():
+    async with async_session() as db:  # Use async_session directly
+        try:
+            result = await db.execute(
+                delete(Session).where(Session.expires_at < datetime.now(timezone.utc))
+            )
+            await db.commit()
+            deleted_count = result.rowcount
+            logger.info(f"Cleanup completed: deleted {deleted_count} expired sessions")
+        except Exception as e:
+            logger.error(f"Cleanup error: {e}")
+            await db.rollback()
 
 # Define lifespan handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup logic
-    print("🐛 DEBUG: Starting up application")
+    #print("🐛 DEBUG: Starting up application")
+    
+    # Single database setup block using SQLAlchemy
+    async with engine.begin() as conn:
+        # Create extension and tables in one transaction
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+        await conn.run_sync(user.Base.metadata.create_all)
+    
+    print("🐛 DEBUG: Database setup complete")
 
     # Setup pg_trgm extension
     try:
-        conn = await asyncpg.connect(dsn=settings.DATABASE_URL.replace("+asyncpg", ""))
+        # conn = await asyncpg.connect(dsn=settings.DATABASE_URL.replace("+asyncpg", ""))
+        from urllib.parse import unquote
+        raw_url = unquote(settings.DATABASE_URL)  # Decode URL-encoded characters
+        clean_url = raw_url.replace("+asyncpg", "")
+        conn = await asyncpg.connect(dsn=clean_url)
+
         await conn.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
         await conn.close()
         print("🐛 DEBUG: pg_trgm extension setup complete")
@@ -36,17 +69,31 @@ async def lifespan(app: FastAPI):
         print(f"❌ Error setting up pg_trgm extension: {e}")
         raise
 
-    await refresh_popular_books()  # Initial refresh
+    # Initialize database models
+    async with engine.begin() as conn:
+        await conn.run_sync(user.Base.metadata.create_all)
     
-    # Setup scheduler
+    # Setup schedulers
     scheduler = AsyncIOScheduler()
+    
+    # Popular books refresh
+    await refresh_popular_books()  # Initial refresh
     scheduler.add_job(
         refresh_popular_books,
         'interval',
-        hours=1  # Refresh every hour
+        hours=1
     )
+    
+    # Session cleanup
+    scheduler.add_job(
+        cleanup_expired_sessions,
+        trigger="interval",
+        hours=24,
+        next_run_time=datetime.now(timezone.utc)
+    )
+    
     scheduler.start()
-    print("🐛 DEBUG: Scheduler started for popular books refresh")
+    print("🐛 DEBUG: All schedulers started")
     
     try:
         yield  # Application runs here
@@ -59,25 +106,36 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app with lifespan
 app = FastAPI(lifespan=lifespan)
 
-# app = FastAPI()
-print("🐛 DEBUG: FastAPI app created")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['http://localhost:5173'],  # Your frontend URL
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS", "DELETE", "PUT", "PATCH"],
+    allow_headers=['*'],
+    expose_headers=["Content-Security-Policy"],
+)
 
+@app.middleware("http")
+async def add_csp_header(request, call_next):
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; object-src 'none';"
+    return response
+
+print("🐛 DEBUG: FastAPI app created")
 
 # Include routers
 app.include_router(recommendations.router, prefix="/api/v1")
-
 app.include_router(books.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(ratings.router, prefix="/api/v1")
 app.include_router(bookmarks.router, prefix="/api/v1")
 app.include_router(reviews.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
-
+app.include_router(auth.router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
     return {"message": "Congrats, It Works!"}
-
 
 if __name__ == "__main__":
     print("🐛 DEBUG: Starting Uvicorn")

@@ -1,0 +1,128 @@
+:root {
+  --cream-100: #FFF8F0;
+  --cream-50: #FDF6EC;
+  --taupe-100: #E6E2DB;
+  --taupe-200: #D1CDC4;
+  --taupe-500: #968579;
+  --taupe-700: #645B52;
+  --gold-500: #D4A017;
+}
+
+.search-bar-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.search-bar-container:hover .search-icon {
+  color: var(--gold-500);
+}
+
+.search-bar {
+  width: 100%;
+  padding: 8px 60px 8px 12px;
+  border: 1px solid var(--taupe-200);
+  border-radius: 8px;
+  background-color: var(--cream-100);
+  font-size: 1rem;
+  color: var(--taupe-700);
+  outline: none;
+}
+
+.search-bar:focus {
+  border-color: var(--gold-500);
+  box-shadow: 0 0 0 2px rgba(212, 160, 23, 0.2);
+}
+
+.search-bar:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.search-bar-loading {
+  cursor: wait;
+}
+
+.search-clear-button {
+  position: absolute;
+  right: 32px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--taupe-500);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.search-clear-button:hover {
+  color: var(--taupe-700);
+}
+
+.search-icon {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--taupe-500);
+  pointer-events: none;
+}
+
+.search-icon:hover {
+  color: var(--taupe-700);
+}
+
+.search-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background-color: var(--cream-100);
+  border: 1px solid var(--taupe-100); /* Lighter border */
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+}
+
+.search-suggestions::-webkit-scrollbar {
+  width: 6px;
+}
+
+.search-suggestions::-webkit-scrollbar-track {
+  background: var(--cream-50);
+}
+
+.search-suggestions::-webkit-scrollbar-thumb {
+  background: var(--taupe-500);
+  border-radius: 3px;
+}
+
+.search-suggestion-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+.search-suggestion-item:hover,
+.search-suggestion-item-selected {
+  background-color: var(--cream-50);
+}
+
+.search-suggestion-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--taupe-700);
+}
+
+.search-suggestion-author {
+  font-size: 0.75rem;
+  color: var(--taupe-500);
+}

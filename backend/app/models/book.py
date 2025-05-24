@@ -3,7 +3,8 @@ from sqlalchemy import Column, Integer, String, Text, Float
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy import Index
 from sqlalchemy.orm import relationship
-from backend.app.database.db import Base
+from backend.app.database.base import Base
+from sqlalchemy.sql import expression
 
 class Book(Base):
     __tablename__ = "books"
@@ -28,7 +29,11 @@ class Book(Base):
     cover_url = Column(String(255))
     page_count = Column(Integer)
     average_rating = Column(Float)
-    search_vector = Column(TSVECTOR)
+    search_vector = Column(
+        TSVECTOR,
+        server_default=expression.text("to_tsvector('english', title || ' ' || author)"),
+        nullable=False
+    )
 
     ratings = relationship("Rating", back_populates="book")
     bookmarks = relationship("Bookmark", back_populates="book")

@@ -2,7 +2,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from backend.app.database.db import Base
+from backend.app.database.base import Base
 
 class Bookmark(Base):
     __tablename__ = 'bookmarks'

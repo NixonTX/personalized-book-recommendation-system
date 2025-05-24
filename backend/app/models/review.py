@@ -2,7 +2,7 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import ENUM
-from backend.app.database.db import Base
+from backend.app.database.base import Base
 from sqlalchemy.orm import relationship
 
 class Review(Base):

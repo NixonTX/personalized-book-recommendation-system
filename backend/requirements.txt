@@ -5,3 +5,5 @@ psycopg2-binary  # PostgreSQL adapter (sync, optional)
 python-multipart # For file uploads (if needed)
 redis>=4.5.5
 hiredis>=2.0.0
+bcrypt>=4.2.0
+passlib[bcrypt]>=1.7.4
